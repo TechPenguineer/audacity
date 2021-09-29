@@ -16,8 +16,7 @@
 
 #include "TimeTrack.h"
 
-
-
+#include "ActiveProject.h"
 #include <cfloat>
 #include <wx/wxcrtvararg.h>
 #include <wx/dc.h>
@@ -25,7 +24,7 @@
 #include "widgets/Ruler.h"
 #include "Envelope.h"
 #include "Project.h"
-#include "ProjectSettings.h"
+#include "ProjectRate.h"
 #include "ViewInfo.h"
 
 #include "tracks/ui/TrackView.h"
@@ -172,16 +171,25 @@ Track::Holder TimeTrack::Copy( double t0, double t1, bool ) const
    return std::make_shared<TimeTrack>( *this, &t0, &t1 );
 }
 
+namespace {
+double GetRate() {
+   auto pProject = GetActiveProject().lock();
+   return pProject
+      ? ProjectRate::Get( *pProject ).GetRate()
+      : 44100.0;
+}
+}
+
 void TimeTrack::Clear(double t0, double t1)
 {
-   auto sampleTime = 1.0 / ProjectSettings::Get( *GetActiveProject() ).GetRate();
+   auto sampleTime = 1.0 / GetRate();
    mEnvelope->CollapseRegion( t0, t1, sampleTime );
 }
 
 void TimeTrack::Paste(double t, const Track * src)
 {
    bool bOk = src && src->TypeSwitch< bool >( [&] (const TimeTrack *tt) {
-      auto sampleTime = 1.0 / ProjectSettings::Get( *GetActiveProject() ).GetRate();
+      auto sampleTime = 1.0 / GetRate();
       mEnvelope->PasteEnvelope
          (t, tt->mEnvelope.get(), sampleTime);
       return true;

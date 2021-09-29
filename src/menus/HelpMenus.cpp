@@ -6,16 +6,18 @@
 
 #include "../AboutDialog.h"
 #include "../AllThemeResources.h"
-#include "../AudioIOBase.h"
+#include "AudioIOBase.h"
 #include "../CommonCommandFlags.h"
 #include "../CrashReport.h" // for HAS_CRASH_REPORT
 #include "FileNames.h"
 #include "../HelpText.h"
 #include "../LogWindow.h"
 #include "../Menus.h"
+#include "../NoteTrack.h"
 #include "Prefs.h"
-#include "../Project.h"
+#include "Project.h"
 #include "../ProjectSelectionManager.h"
+#include "../ProjectWindows.h"
 #include "../SelectFile.h"
 #include "../ShuttleGui.h"
 #include "../SplashDialog.h"
@@ -25,6 +27,10 @@
 #include "../prefs/PrefsDialog.h"
 #include "../widgets/AudacityMessageBox.h"
 #include "../widgets/HelpSystem.h"
+
+#if defined(HAVE_UPDATES_CHECK)
+#include "update/UpdateManager.h"
+#endif
 
 // private helper classes and functions
 namespace {
@@ -335,7 +341,7 @@ void OnMidiDeviceInfo(const CommandContext &context)
 {
    auto &project = context.project;
    auto gAudioIO = AudioIOBase::Get();
-   wxString info = gAudioIO->GetMidiDeviceInfo();
+   auto info = GetMIDIDeviceInfo();
    ShowDiagnostics( project, info,
       XO("MIDI Device Info"), wxT("midideviceinfo.txt") );
 }
@@ -440,10 +446,12 @@ void OnMenuTree(const CommandContext &context)
       Verbatim("Menu Tree"), wxT("menutree.txt"), true );
 }
 
+#if defined(HAVE_UPDATES_CHECK)
 void OnCheckForUpdates(const CommandContext &WXUNUSED(context))
 {
-   ::OpenInDefaultBrowser( VerCheckUrl());
+    UpdateManager::GetInstance().GetUpdates(false, false);
 }
+#endif
 
 void OnAbout(const CommandContext &context)
 {
@@ -573,9 +581,8 @@ BaseItemSharedPtr HelpMenu()
 #else
       ,
 #endif
-
          // DA: Does not fully support update checking.
-   #ifndef EXPERIMENTAL_DA
+   #if !defined(EXPERIMENTAL_DA) && defined(HAVE_UPDATES_CHECK)
          Command( wxT("Updates"), XXO("&Check for Updates..."),
             FN(OnCheckForUpdates),
             AlwaysEnabledFlag ),

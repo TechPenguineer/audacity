@@ -37,6 +37,10 @@ public:
    
    virtual const Type &SubViewType() const = 0;
 
+   // For undo and redo purpose
+   // Empty abstract method to be inherited, for copying the spectral data in SpectrumSubView
+   virtual void CopyToSubView(WaveTrackSubView *destSubView) const;
+
    std::pair<
       bool, // if true, hit-testing is finished
       std::vector<UIHandlePtr>
@@ -51,6 +55,10 @@ protected:
       const wxRect &rect );
 
    std::weak_ptr<WaveTrackView> GetWaveTrackView() const;
+
+   std::vector<MenuItem> GetMenuItems(
+      const wxRect &rect, const wxPoint *pPosition, AudacityProject *pProject )
+   override;
 
 private:
    std::weak_ptr<UIHandle> mCloseHandle;
@@ -142,6 +150,17 @@ public:
    // y coordinate for each subview within this rect
    Refinement GetSubViews(const wxRect* rect = nullptr);
 
+   unsigned CaptureKey
+   (wxKeyEvent& event, ViewInfo& viewInfo, wxWindow* pParent,
+       AudacityProject* project) override;
+
+   unsigned KeyDown(wxKeyEvent& event, ViewInfo& viewInfo, wxWindow* pParent,
+       AudacityProject* project) override;
+
+   unsigned Char
+   (wxKeyEvent& event, ViewInfo& viewInfo, wxWindow* pParent,
+       AudacityProject* project) override;
+
 private:
    void BuildSubViews() const;
    void DoSetDisplay(Display display, bool exclusive = true);
@@ -216,7 +235,7 @@ struct AUDACITY_DLL_API ClipParameters
 
    // returns a clip rectangle restricted by viewRect, 
    // and with clipOffsetX - clip horizontal origin offset within view rect
-   static wxRect GetClipRect(const WaveClip& clip, const ZoomInfo& zoomInfo, const wxRect& viewRect, int clipOffsetX = 0);
+   static wxRect GetClipRect(const WaveClip& clip, const ZoomInfo& zoomInfo, const wxRect& viewRect);
 };
 
 #endif

@@ -20,12 +20,16 @@ Paul Licameli split from ProjectManager.cpp
 #include "CommonCommandFlags.h"
 #include "LabelTrack.h"
 #include "Menus.h"
+#include "Meter.h"
 #include "Project.h"
 #include "ProjectAudioIO.h"
 #include "ProjectFileIO.h"
 #include "ProjectHistory.h"
+#include "ProjectRate.h"
 #include "ProjectSettings.h"
 #include "ProjectStatus.h"
+#include "ProjectWindows.h"
+#include "ScrubState.h"
 #include "TimeTrack.h"
 #include "TrackPanelAx.h"
 #include "UndoManager.h"
@@ -108,11 +112,7 @@ int ProjectAudioManager::PlayPlayRegion(const SelectedRegion &selectedRegion,
    if ( !canStop )
       return -1;
 
-   bool useMidi = true;
-
-   // Remove these lines to experiment with scrubbing/seeking of note tracks
-   if (options.pScrubbingOptions)
-      useMidi = false;
+   bool nonWaveToo = options.playNonWaveTracks;
 
    // Uncomment this for laughs!
    // backwards = true;
@@ -121,7 +121,7 @@ int ProjectAudioManager::PlayPlayRegion(const SelectedRegion &selectedRegion,
    double t1 = selectedRegion.t1();
    // SelectedRegion guarantees t0 <= t1, so we need another boolean argument
    // to indicate backwards play.
-   const bool looped = options.playLooped;
+   const bool looped = (mode == PlayMode::loopedPlay);
 
    if (backwards)
       std::swap(t0, t1);
@@ -146,7 +146,7 @@ int ProjectAudioManager::PlayPlayRegion(const SelectedRegion &selectedRegion,
    mLastPlayMode = mode;
 
    bool hasaudio;
-   if (useMidi)
+   if (nonWaveToo)
       hasaudio = ! tracks.Any<PlayableTrack>().empty();
    else
       hasaudio = ! tracks.Any<WaveTrack>().empty();
@@ -230,7 +230,7 @@ int ProjectAudioManager::PlayPlayRegion(const SelectedRegion &selectedRegion,
             myOptions.cutPreviewGapStart = t0;
             myOptions.cutPreviewGapLen = t1 - t0;
             token = gAudioIO->StartStream(
-               GetAllPlaybackTracks(*mCutPreviewTracks, false, useMidi),
+               GetAllPlaybackTracks(*mCutPreviewTracks, false, nonWaveToo),
                tcp0, tcp1, myOptions);
          }
          else
@@ -239,7 +239,7 @@ int ProjectAudioManager::PlayPlayRegion(const SelectedRegion &selectedRegion,
       }
       else {
          token = gAudioIO->StartStream(
-            GetAllPlaybackTracks( tracks, false, useMidi ),
+            GetAllPlaybackTracks( tracks, false, nonWaveToo ),
             t0, t1, options);
       }
       if (token != 0) {
@@ -294,13 +294,12 @@ void ProjectAudioManager::PlayCurrentRegion(bool looped /* = false */,
 
       const auto &playRegion = ViewInfo::Get( *p ).playRegion;
 
-      auto options = DefaultPlayOptions( *p );
-      options.playLooped = looped;
+      auto options = DefaultPlayOptions( *p, looped );
       if (cutpreview)
          options.envelope = nullptr;
       auto mode =
          cutpreview ? PlayMode::cutPreviewPlay
-         : options.playLooped ? PlayMode::loopedPlay
+         : looped ? PlayMode::loopedPlay
          : PlayMode::normalPlay;
       PlayPlayRegion(SelectedRegion(playRegion.GetStart(), playRegion.GetEnd()),
                      options,
@@ -644,7 +643,16 @@ bool ProjectAudioManager::DoRecord(AudacityProject &project,
             // Less than or equal, not just less than, to ensure a clip boundary.
             // when append recording.
             if (endTime <= t0) {
-               pending->CreateClip(t0);
+               auto newName = [&]() {
+                  for (auto i = 1;; ++i)
+                  {
+                     //i18n-hint a numerical suffix added to distinguish otherwise like-named clips when new record started
+                     auto name = XC("%s #%d", "clip name template").Format(pending->GetName(), i).Translation();
+                     if (pending->FindClipByName(name) == nullptr)
+                        return name;
+                  }
+               }();
+               pending->CreateClip(t0, newName);
             }
             transportTracks.captureTracks.push_back(pending);
          }
@@ -785,7 +793,7 @@ void ProjectAudioManager::OnPause()
    // Bug 1494 - Pausing a seek or scrub should just STOP as
    // it is confusing to be in a paused scrub state.
    bool bStopInstead = paused &&
-      gAudioIO->IsScrubbing() &&
+      ScrubState::IsScrubbing() &&
       !scrubber.IsSpeedPlaying() &&
       !scrubber.IsKeyboardScrubbing();
 
@@ -794,7 +802,7 @@ void ProjectAudioManager::OnPause()
       return;
    }
 
-   if (gAudioIO->IsScrubbing())
+   if (ScrubState::IsScrubbing())
       scrubber.Pause(paused);
    else
 #endif
@@ -997,44 +1005,39 @@ const ReservedCommandFlag&
    }; return flag; }
 
 AudioIOStartStreamOptions
-DefaultPlayOptions( AudacityProject &project )
+DefaultPlayOptions( AudacityProject &project, bool looped )
 {
    auto &projectAudioIO = ProjectAudioIO::Get( project );
    AudioIOStartStreamOptions options { &project,
-      ProjectSettings::Get( project ).GetRate() };
+      ProjectRate::Get( project ).GetRate() };
    options.captureMeter = projectAudioIO.GetCaptureMeter();
    options.playbackMeter = projectAudioIO.GetPlaybackMeter();
    auto timeTrack = *TrackList::Get( project ).Any<TimeTrack>().begin();
    options.envelope = timeTrack ? timeTrack->GetEnvelope() : nullptr;
    options.listener = ProjectAudioManager::Get( project ).shared_from_this();
+   
+   if (looped)
+      options.policyFactory = []() -> std::unique_ptr<PlaybackPolicy> {
+         return std::make_unique<LoopingPlaybackPolicy>(); };
    return options;
 }
 
 AudioIOStartStreamOptions
 DefaultSpeedPlayOptions( AudacityProject &project )
 {
-   auto &projectAudioIO = ProjectAudioIO::Get( project );
+   auto result = DefaultPlayOptions( project );
    auto gAudioIO = AudioIO::Get();
    auto PlayAtSpeedRate = gAudioIO->GetBestRate(
       false,     //not capturing
       true,      //is playing
-      ProjectSettings::Get( project ).GetRate()  //suggested rate
+      ProjectRate::Get( project ).GetRate()  //suggested rate
    );
-   AudioIOStartStreamOptions options{ &project, PlayAtSpeedRate };
-   options.captureMeter = projectAudioIO.GetCaptureMeter();
-   options.playbackMeter = projectAudioIO.GetPlaybackMeter();
-   auto timeTrack = *TrackList::Get( project ).Any<TimeTrack>().begin();
-   options.envelope = timeTrack ? timeTrack->GetEnvelope() : nullptr;
-   options.listener = ProjectAudioManager::Get( project ).shared_from_this();
-   return options;
+   result.rate = PlayAtSpeedRate;
+   return result;
 }
 
-#ifdef EXPERIMENTAL_MIDI_OUT
-#include "NoteTrack.h"
-#endif
-
 TransportTracks ProjectAudioManager::GetAllPlaybackTracks(
-   TrackList &trackList, bool selectedOnly, bool useMidi)
+   TrackList &trackList, bool selectedOnly, bool nonWaveToo)
 {
    TransportTracks result;
    {
@@ -1045,12 +1048,13 @@ TransportTracks ProjectAudioManager::GetAllPlaybackTracks(
             pTrack->SharedPointer< WaveTrack >() );
    }
 #ifdef EXPERIMENTAL_MIDI_OUT
-   if (useMidi) {
-      auto range = trackList.Any< const NoteTrack >() +
+   if (nonWaveToo) {
+      auto range = trackList.Any< const PlayableTrack >() +
          (selectedOnly ? &Track::IsSelected : &Track::Any );
       for (auto pTrack: range)
-         result.midiTracks.push_back(
-            pTrack->SharedPointer< const NoteTrack >() );
+         if (!track_cast<const WaveTrack *>(pTrack))
+            result.otherPlayableTracks.push_back(
+               pTrack->SharedPointer< const PlayableTrack >() );
    }
 #else
    WXUNUSED(useMidi);

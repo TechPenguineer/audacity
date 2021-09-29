@@ -16,11 +16,12 @@ Paul Licameli split from TrackPanel.cpp
 
 #include "WaveTrackView.h"
 #include "WaveTrackViewConstants.h"
-#include "../../../../AudioIOBase.h"
+#include "AudioIOBase.h"
 #include "../../../../CellularPanel.h"
-#include "../../../../Project.h"
+#include "Project.h"
 #include "../../../../ProjectAudioIO.h"
 #include "../../../../ProjectHistory.h"
+#include "../../../../ProjectWindows.h"
 #include "../../../../RefreshCode.h"
 #include "../../../../ShuttleGui.h"
 #include "../../../../TrackArtist.h"
@@ -979,7 +980,7 @@ WaveTrackPopupMenuTable &GetWaveTrackMenuTable()
 #include "../../../../widgets/ASlider.h"
 #include "../../../../TrackInfo.h"
 #include "../../../../TrackPanelDrawingContext.h"
-#include "../../../../ViewInfo.h"
+#include "ViewInfo.h"
 
 namespace {
 

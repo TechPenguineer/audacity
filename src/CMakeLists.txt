@@ -86,6 +86,8 @@ list( APPEND SOURCES
       AColor.cpp
       AColor.h
       AColorResources.h
+      ActiveProject.cpp
+      ActiveProject.h
       ActiveProjects.cpp
       ActiveProjects.h
       AboutDialog.cpp
@@ -103,8 +105,8 @@ list( APPEND SOURCES
       AudacityHeaders.h
       AudioIO.cpp
       AudioIO.h
-      AudioIOBase.cpp
-      AudioIOBase.h
+      AudioIOExt.cpp
+      AudioIOExt.h
       AudioIOListener.h
       AutoRecoveryDialog.cpp
       AutoRecoveryDialog.h
@@ -118,6 +120,7 @@ list( APPEND SOURCES
       Benchmark.h
       CellularPanel.cpp
       CellularPanel.h
+      ClassicThemeAsCeeCode.cpp
       ClassicThemeAsCeeCode.h
       Clipboard.cpp
       Clipboard.h
@@ -125,13 +128,10 @@ list( APPEND SOURCES
       CommonCommandFlags.h
       CrashReport.cpp
       CrashReport.h
+      DarkThemeAsCeeCode.cpp
       DarkThemeAsCeeCode.h
       DBConnection.cpp
       DBConnection.h
-      DeviceChange.cpp
-      DeviceChange.h
-      DeviceManager.cpp
-      DeviceManager.h
       Diags.cpp
       Diags.h
       Envelope.cpp
@@ -146,6 +146,7 @@ list( APPEND SOURCES
       FreqWindow.h
       HelpText.cpp
       HelpText.h
+      HiContrastThemeAsCeeCode.cpp
       HiContrastThemeAsCeeCode.h
       HistoryWindow.cpp
       HistoryWindow.h
@@ -172,6 +173,7 @@ list( APPEND SOURCES
       LangChoice.h
       Legacy.cpp
       Legacy.h
+      LightThemeAsCeeCode.cpp
       LightThemeAsCeeCode.h
       LogWindow.cpp
       LogWindow.h
@@ -182,6 +184,8 @@ list( APPEND SOURCES
       MacroMagic.h
       Menus.cpp
       Menus.h
+      MIDIPlay.cpp
+      MIDIPlay.h
       Mix.cpp
       Mix.h
       MixerBoard.cpp
@@ -192,7 +196,6 @@ list( APPEND SOURCES
       ModuleSettings.h
       NoteTrack.cpp
       NoteTrack.h
-      NumberScale.h
       PitchName.cpp
       PitchName.h
       PlaybackSchedule.cpp
@@ -205,8 +208,6 @@ list( APPEND SOURCES
       Printing.h
       Profiler.cpp
       Profiler.h
-      Project.cpp
-      Project.h
       ProjectAudioIO.cpp
       ProjectAudioIO.h
       ProjectAudioManager.cpp
@@ -225,25 +226,25 @@ list( APPEND SOURCES
       ProjectSerializer.h
       ProjectSettings.cpp
       ProjectSettings.h
-      ProjectStatus.cpp
-      ProjectStatus.h
       ProjectWindow.cpp
       ProjectWindow.h
       ProjectWindowBase.cpp
       ProjectWindowBase.h
       RefreshCode.h
+      ProjectWindows.cpp
+      ProjectWindows.h
       RingBuffer.cpp
       RingBuffer.h
       SampleBlock.cpp
       SampleBlock.h
       Screenshot.cpp
       Screenshot.h
+      ScrubState.cpp
+      ScrubState.h
       SelectUtilities.cpp
       SelectUtilities.h
       SelectFile.cpp
       SelectFile.h
-      SelectedRegion.cpp
-      SelectedRegion.h
       SelectionState.cpp
       SelectionState.h
       Sequence.cpp
@@ -260,8 +261,13 @@ list( APPEND SOURCES
       Snap.h
       SoundActivatedRecord.cpp
       SoundActivatedRecord.h
+      SpectralDataDialog.cpp
+      SpectralDataManager.h
+      SpectralDataManager.cpp
       SpectrumAnalyst.cpp
       SpectrumAnalyst.h
+      SpectrumTransformer.cpp
+      SpectrumTransformer.h
       SplashDialog.cpp
       SplashDialog.h
       SqliteSampleBlock.cpp
@@ -271,7 +277,6 @@ list( APPEND SOURCES
       Tags.h
       Theme.cpp
       Theme.h
-      ThemeAsCeeCode.h
       TimeDialog.cpp
       TimeDialog.h
       TimeTrack.cpp
@@ -306,8 +311,6 @@ list( APPEND SOURCES
       UIHandle.h
       UndoManager.cpp
       UndoManager.h
-      ViewInfo.cpp
-      ViewInfo.h
       VoiceKey.cpp
       VoiceKey.h
       WaveClip.cpp
@@ -317,8 +320,6 @@ list( APPEND SOURCES
       WaveTrackLocation.h
       WrappedType.cpp
       WrappedType.h
-      ZoomInfo.cpp
-      ZoomInfo.h
 
       # Commands
 
@@ -704,8 +705,6 @@ list( APPEND SOURCES
       prefs/PrefsPanel.h
       prefs/QualityPrefs.cpp
       prefs/QualityPrefs.h
-      prefs/QualitySettings.cpp
-      prefs/QualitySettings.h
       prefs/RecordingPrefs.cpp
       prefs/RecordingPrefs.h
       prefs/SpectrogramSettings.cpp
@@ -840,6 +839,8 @@ list( APPEND SOURCES
       tracks/ui/AffordanceHandle.h
       tracks/ui/BackgroundCell.cpp
       tracks/ui/BackgroundCell.h
+      tracks/ui/BrushHandle.cpp
+      tracks/ui/BrushHandle.h
       tracks/ui/ButtonHandle.cpp
       tracks/ui/ButtonHandle.h
       tracks/ui/CommonTrackControls.cpp
@@ -862,6 +863,8 @@ list( APPEND SOURCES
       tracks/ui/SelectHandle.h
       tracks/ui/SliderHandle.cpp
       tracks/ui/SliderHandle.h
+      tracks/ui/TextEditHelper.cpp
+      tracks/ui/TextEditHelper.h
       tracks/ui/TimeShiftHandle.cpp
       tracks/ui/TimeShiftHandle.h
       tracks/ui/TrackButtonHandles.cpp
@@ -927,8 +930,8 @@ list( APPEND SOURCES
       widgets/ImageRoll.h
       widgets/KeyView.cpp
       widgets/KeyView.h
-      widgets/Meter.cpp
-      widgets/Meter.h
+      widgets/MeterPanel.cpp
+      widgets/MeterPanel.h
       widgets/MeterPanelBase.cpp
       widgets/MeterPanelBase.h
       widgets/MultiDialog.cpp
@@ -981,6 +984,8 @@ list( APPEND SOURCES
           update/UpdatePopupDialog.cpp
           prefs/ApplicationPrefs.h
           prefs/ApplicationPrefs.cpp
+          update/NoUpdatesAvailableDialog.h
+          update/NoUpdatesAvailableDialog.cpp
       >
 
       Experimental.cmake
@@ -1069,7 +1074,6 @@ list( APPEND LIBRARIES
       PortAudio::PortAudio
       sqlite
       $<$<BOOL:${${_OPT}has_crashreports}>:crashreports>
-      $<$<BOOL:${USE_FFMPEG}>:ffmpeg>
       $<$<BOOL:${USE_LIBID3TAG}>:libid3tag::libid3tag>
       $<$<BOOL:${USE_LIBFLAC}>:FLAC::FLAC>
       $<$<BOOL:${USE_LIBFLAC}>:FLAC::FLAC++>
@@ -1095,7 +1099,6 @@ list( APPEND LIBRARIES
 )
 
 set( BUILDING_AUDACITY YES )
-set( INSTALL_PREFIX "${_PREFIX}" )
 set( PKGLIBDIR "${_PKGLIBDIR}" )
 set( LIBDIR "${CMAKE_INSTALL_FULL_LIBDIR}" )
 set( HAVE_GTK ${GTK_FOUND} )

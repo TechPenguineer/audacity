@@ -6,17 +6,18 @@
 #include "../NoteTrack.h"
 #include "Prefs.h"
 #include "../Printing.h"
-#include "../Project.h"
+#include "Project.h"
 #include "../ProjectFileIO.h"
 #include "../ProjectFileManager.h"
 #include "../ProjectHistory.h"
 #include "../ProjectManager.h"
+#include "../ProjectWindows.h"
 #include "../ProjectWindow.h"
 #include "../SelectFile.h"
 #include "../SelectUtilities.h"
 #include "../TrackPanel.h"
 #include "../UndoManager.h"
-#include "../ViewInfo.h"
+#include "ViewInfo.h"
 #include "../WaveTrack.h"
 #include "../commands/CommandContext.h"
 #include "../commands/CommandManager.h"
@@ -66,7 +67,7 @@ void DoExport(AudacityProject &project, const FileExtension &format)
       // or we use the default documents folder - just as for exports.
       FilePath pathName = FileNames::FindDefaultPath(FileNames::Operation::MacrosOut);
 
-      if (!FileNames::WritableLocationCheck(pathName))
+      if (!FileNames::WritableLocationCheck(pathName, XO("Cannot proceed to export.")))
       {
           return;
       }
@@ -134,7 +135,7 @@ void DoImport(const CommandContext &context, bool isRaw)
    // PRL:  This affects FFmpegImportPlugin::Open which resets the preference
    // to false.  Should it also be set to true on other paths that reach
    // AudacityProject::Import ?
-   gPrefs->Write(wxT("/NewImportingSession"), true);
+   NewImportingSession.Write(false);
 
    selectedFiles.Sort(FileNames::CompareNoCase);
 
@@ -552,6 +553,15 @@ static CommandHandlerObject &findCommandHandler(AudacityProject &) {
 
 namespace {
 using namespace MenuTable;
+
+#ifdef USE_MIDI
+const ReservedCommandFlag&
+   NoteTracksExistFlag() { static ReservedCommandFlag flag{
+      [](const AudacityProject &project){
+         return !TrackList::Get( project ).Any<const NoteTrack>().empty();
+      }
+   }; return flag; }  //gsw
+#endif
 
 BaseItemSharedPtr FileMenu()
 {

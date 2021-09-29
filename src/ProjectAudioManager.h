@@ -56,7 +56,9 @@ public:
    static bool UseDuplex();
 
    static TransportTracks GetAllPlaybackTracks(
-      TrackList &trackList, bool selectedOnly, bool useMidi = false);
+      TrackList &trackList, bool selectedOnly,
+      bool nonWaveToo = false //!< if true, collect all PlayableTracks
+   );
 
    explicit ProjectAudioManager( AudacityProject &project );
    ProjectAudioManager( const ProjectAudioManager & ) PROHIBITED;
@@ -165,8 +167,8 @@ private:
 };
 
 AUDACITY_DLL_API
-AudioIOStartStreamOptions DefaultPlayOptions( AudacityProject &project );
-AUDACITY_DLL_API
+AudioIOStartStreamOptions DefaultPlayOptions(
+   AudacityProject &project, bool looped = false );
 AudioIOStartStreamOptions DefaultSpeedPlayOptions( AudacityProject &project );
 
 struct PropertiesOfSelected

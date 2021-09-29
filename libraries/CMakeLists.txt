@@ -15,6 +15,11 @@ set( LIBRARIES
    lib-files
    lib-registries
    lib-xml
+   lib-audio-devices
+   lib-project
+   lib-screen-geometry
+   lib-project-rate
+   lib-ffmpeg-support
 )
 
 if ( ${_OPT}has_networking )

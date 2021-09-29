@@ -332,7 +332,7 @@ else()
 endif()
 
 set( _DEST "${_DESTDIR}" )
-set( _PREFIX "${CMAKE_INSTALL_PREFIX}" )
+set( INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}" )
 set( _LIBDIR "${CMAKE_INSTALL_LIBDIR}" )
 set( _DATADIR "${CMAKE_INSTALL_DATADIR}" )
 set( _PKGLIB "${_LIBDIR}/audacity" )
@@ -523,6 +523,16 @@ endif()
 # define EXPERIMENTAL flags
 # Do this before consistency checks for added third-party libraries
 include( "src/Experimental.cmake" )
+
+cmd_option( ${_OPT}use_ffmpeg
+   "Use ffmpeg library [loaded, off]"
+   "loaded"
+   STRINGS "loaded" "off"
+)
+
+if( ${_OPT}use_ffmpeg )
+   set(USE_FFMPEG Yes)
+endif()
 
 # Add our children
 add_subdirectory( "cmake-proxies" )

@@ -14,7 +14,7 @@ Paul Licameli split from AudacityProject.cpp
 
 #include "AudioIOBase.h"
 #include "Project.h"
-#include "prefs/QualitySettings.h"
+#include "QualitySettings.h"
 #include "widgets/NumericTextCtrl.h"
 #include "prefs/TracksBehaviorsPrefs.h"
 #include "XMLWriter.h"
@@ -68,18 +68,8 @@ ProjectSettings::ProjectSettings(AudacityProject &project)
    gPrefs->Read(wxT("/BandwidthSelectionFormatName"), wxT("")) )
 }
 , mSnapTo( gPrefs->Read(wxT("/SnapTo"), SNAP_OFF) )
+, mCurrentBrushRadius ( 5 )
 {
-   int intRate = 0;
-   bool wasDefined = QualitySettings::DefaultSampleRate.Read( &intRate );
-   mRate = intRate;
-   if ( !wasDefined ) {
-      // The default given above can vary with host/devices. So unless there is
-      // an entry for the default sample rate in audacity.cfg, Audacity can open
-      // with a rate which is different from the rate with which it closed.
-      // See bug 1879.
-      QualitySettings::DefaultSampleRate.Write( mRate );
-      gPrefs->Flush();
-   }
    gPrefs->Read(wxT("/GUI/SyncLockTracks"), &mIsSyncLocked, false);
 
    bool multiToolActive = false;
@@ -166,20 +156,6 @@ const NumericFormatSymbol & ProjectSettings::GetAudioTimeFormat() const
    return mAudioTimeFormat;
 }
 
-double ProjectSettings::GetRate() const
-{
-   return mRate;
-}
-
-void ProjectSettings::SetRate(double rate)
-{
-   auto &project = mProject;
-   if (rate != mRate) {
-      mRate = rate;
-      Notify( project, ChangedProjectRate );
-   }
-}
-
 void ProjectSettings::SetSnapTo(int snap)
 {
    mSnapTo = snap;
@@ -188,6 +164,12 @@ void ProjectSettings::SetSnapTo(int snap)
 int ProjectSettings::GetSnapTo() const
 {
    return mSnapTo;
+}
+
+// Move it to source file, to trigger event
+void ProjectSettings::SetTool(int tool) {
+   mCurrentTool = tool;
+   Notify( mProject, ChangedTool );
 }
 
 bool ProjectSettings::IsSyncLocked() const
@@ -211,7 +193,6 @@ void ProjectSettings::SetSyncLock(bool flag)
 static ProjectFileIORegistry::WriterEntry entry {
 [](const AudacityProject &project, XMLWriter &xmlFile){
    auto &settings = ProjectSettings::Get(project);
-   xmlFile.WriteAttr(wxT("rate"), settings.GetRate());
    xmlFile.WriteAttr(wxT("snapto"), settings.GetSnapTo() ? wxT("on") : wxT("off"));
    xmlFile.WriteAttr(wxT("selectionformat"),
                      settings.GetSelectionFormat().Internal());
@@ -225,12 +206,6 @@ static ProjectFileIORegistry::WriterEntry entry {
 static ProjectFileIORegistry::AttributeReaderEntries entries {
 // Just a pointer to function, but needing overload resolution as non-const:
 (ProjectSettings& (*)(AudacityProject &)) &ProjectSettings::Get, {
-   { L"rate", [](auto &settings, auto value){
-      double rate;
-      Internat::CompatibleToDouble(value, &rate);
-      settings.SetRate( rate );
-   } },
-
    // PRL:  The following have persisted as per-project settings for long.
    // Maybe that should be abandoned.  Enough to save changes in the user
    // preference file.
