@@ -11,11 +11,11 @@ Paul Licameli split from AudioIO.h
 #ifndef __AUDACITY_AUDIO_IO_BASE__
 #define __AUDACITY_AUDIO_IO_BASE__
 
-
-
-
+#include <atomic>
 #include <cfloat>
+#include <chrono>
 #include <functional>
+#include <optional>
 #include <vector>
 #include <wx/string.h>
 #include "MemoryX.h"
@@ -43,20 +43,20 @@ class PlaybackPolicy;
 struct AudioIOStartStreamOptions
 {
    explicit
-   AudioIOStartStreamOptions(AudacityProject *pProject_, double rate_)
-      : pProject{ pProject_ }
+   AudioIOStartStreamOptions(
+      const std::shared_ptr<AudacityProject> &pProject, double rate_)
+      : pProject{ pProject }
       , envelope(nullptr)
       , rate(rate_)
-      , pStartTime(NULL)
       , preRoll(0.0)
    {}
 
-   AudacityProject *pProject{};
+   std::shared_ptr<AudacityProject> pProject;
    std::weak_ptr<Meter> captureMeter, playbackMeter;
    const BoundedEnvelope *envelope; // for time warping
    std::shared_ptr< AudioIOListener > listener;
    double rate;
-   double * pStartTime;
+   mutable std::optional<double> pStartTime;
    double preRoll;
 
    bool playNonWaveTracks{ true };
@@ -66,11 +66,15 @@ struct AudioIOStartStreamOptions
 
    // An unfortunate thing needed just to make scrubbing work on Linux when
    // we can't use a separate polling thread.
-   // The return value is a number of milliseconds to sleep before calling again
-   std::function< unsigned long() > playbackStreamPrimer;
+   // The return value is duration to sleep before calling again
+   std::function< std::chrono::milliseconds() > playbackStreamPrimer;
 
-   using PolicyFactory = std::function< std::unique_ptr<PlaybackPolicy>() >;
+   using PolicyFactory = std::function<
+      std::unique_ptr<PlaybackPolicy>(const AudioIOStartStreamOptions&) >;
    PolicyFactory policyFactory;
+
+   bool loopEnabled{ false };
+   bool variableSpeed{ false };
 };
 
 struct AudioIODiagnostics{
@@ -107,9 +111,9 @@ public:
    AudioIOBase &operator=(const AudioIOBase &) = delete;
 
    void SetCaptureMeter(
-      AudacityProject *project, const std::weak_ptr<Meter> &meter);
+      const std::shared_ptr<AudacityProject> &project, const std::weak_ptr<Meter> &meter);
    void SetPlaybackMeter(
-      AudacityProject *project, const std::weak_ptr<Meter> &meter);
+      const std::shared_ptr<AudacityProject> &project, const std::weak_ptr<Meter> &meter);
 
    /** \brief update state after changing what audio devices are selected
     *
@@ -239,14 +243,16 @@ protected:
    static wxString DeviceName(const PaDeviceInfo* info);
    static wxString HostName(const PaDeviceInfo* info);
 
-   AudacityProject    *mOwningProject;
+   std::weak_ptr<AudacityProject> mOwningProject;
 
    /// True if audio playback is paused
-   bool                mPaused;
+   std::atomic<bool>   mPaused{ false };
 
-   volatile int        mStreamToken;
+   /*! Read by worker threads but unchanging during playback */
+   int                 mStreamToken{ 0 };
 
    /// Audio playback rate in samples per second
+   /*! Read by worker threads but unchanging during playback */
    double              mRate;
 
    PaStream           *mPortStreamV19;
@@ -259,7 +265,6 @@ protected:
    float               mPreviousHWPlaythrough;
    #endif /* USE_PORTMIXER */
 
-   bool                mEmulateMixerOutputVol;
    /** @brief Can we control the hardware input level?
     *
     * This flag is set to true if using portmixer to control the
@@ -268,7 +273,6 @@ protected:
     * scaled clipping problems when trying to do software emulated input volume
     * control */
    bool                mInputMixerWorks;
-   float               mMixerOutputVol;
 
    // For cacheing supported sample rates
    static int mCachedPlaybackIndex;
@@ -325,6 +329,8 @@ extern AUDIO_DEVICES_API StringSetting AudioIOHost;
 extern AUDIO_DEVICES_API DoubleSetting AudioIOLatencyCorrection;
 extern AUDIO_DEVICES_API DoubleSetting AudioIOLatencyDuration;
 extern AUDIO_DEVICES_API StringSetting AudioIOPlaybackDevice;
+extern AUDIO_DEVICES_API StringSetting AudioIOPlaybackSource;
+extern AUDIO_DEVICES_API DoubleSetting AudioIOPlaybackVolume;
 extern AUDIO_DEVICES_API IntSetting    AudioIORecordChannels;
 extern AUDIO_DEVICES_API StringSetting AudioIORecordingDevice;
 extern AUDIO_DEVICES_API StringSetting AudioIORecordingSource;

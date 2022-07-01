@@ -13,12 +13,12 @@ Edward Hui
 #include "Scrubbing.h"
 #include "TrackView.h"
 
-#include "../../AColor.h"
+#include "AColor.h"
 #include "../../SpectrumAnalyst.h"
 #include "NumberScale.h"
 #include "Project.h"
 #include "../../ProjectAudioIO.h"
-#include "../../ProjectHistory.h"
+#include "ProjectHistory.h"
 #include "../../ProjectSettings.h"
 #include "../../ProjectWindow.h"
 #include "../../RefreshCode.h"
@@ -37,7 +37,7 @@ Edward Hui
 #include "../../../images/Cursors.h"
 #include "../playabletrack/wavetrack/ui/SpectrumView.h"
 
-#include <tgmath.h>
+#include <cmath>
 #include <wx/event.h>
 #include <iostream>
 
@@ -147,8 +147,8 @@ BrushHandle::BrushHandle
         const std::shared_ptr<SpectralData> &pSpectralData,
         const ProjectSettings &pSettings)
       : mpStateSaver{ move(pStateSaver) }
-      , mpView{ pTrackView }
       , mpSpectralData(pSpectralData)
+      , mpView{ pTrackView }
 {
    const wxMouseState &state = st.state;
    auto pTrack = pTrackView->FindTrack().get();
@@ -199,7 +199,7 @@ bool BrushHandle::Escape(AudacityProject *project)
    return false;
 }
 
-// Add or remove data accroding to the ctrl key press
+// Add or remove data according to the ctrl key press
 void BrushHandle::HandleHopBinData(int hopNum, int freqBinNum) {
    // Ignore the mouse dragging outside valid area
    // We should also check for the available freq. range that is visible to user

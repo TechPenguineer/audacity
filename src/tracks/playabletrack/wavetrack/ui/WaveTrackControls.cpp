@@ -20,10 +20,11 @@ Paul Licameli split from TrackPanel.cpp
 #include "../../../../CellularPanel.h"
 #include "Project.h"
 #include "../../../../ProjectAudioIO.h"
-#include "../../../../ProjectHistory.h"
+#include "ProjectHistory.h"
 #include "../../../../ProjectWindows.h"
 #include "../../../../RefreshCode.h"
 #include "../../../../ShuttleGui.h"
+#include "Theme.h"
 #include "../../../../TrackArtist.h"
 #include "../../../../TrackPanel.h"
 #include "../../../../TrackPanelAx.h"
@@ -65,6 +66,10 @@ std::vector<UIHandlePtr> WaveTrackControls::HitTest
 
          if (NULL != (result = SoloButtonHandle::HitTest(
             mSoloHandle, state, rect, pProject, track)))
+            return result;
+
+         if (NULL != (result = EffectsButtonHandle::HitTest(
+            mEffectsHandle, state, rect, pProject, track)))
             return result;
 
          if (NULL != (result = GainSliderHandle::HitTest(
@@ -167,11 +172,6 @@ struct FormatMenuTable :  PopupMenuTable
 
    void InitUserData(void *pUserData) override;
 
-   void DestroyMenu() override
-   {
-      mpData = NULL;
-   }
-
    PlayableTrackControls::InitMenuData *mpData{};
 
    static int IdOfFormat(int format);
@@ -261,7 +261,8 @@ void FormatMenuTable::OnFormatChange(wxCommandEvent & event)
 
    sampleCount totalSamples{ 0 };
    for (const auto& channel : TrackList::Channels(pTrack))
-      totalSamples += channel->GetNumSamples();
+      // Hidden samples are processed too, they should be counted as well
+      totalSamples += channel->GetSequenceSamplesCount();
    sampleCount processedSamples{ 0 };
 
    // Below is the lambda function that is passed along the call chain to
@@ -309,11 +310,6 @@ struct RateMenuTable : PopupMenuTable
    static RateMenuTable &Instance();
 
    void InitUserData(void *pUserData) override;
-
-   void DestroyMenu() override
-   {
-      mpData = NULL;
-   }
 
    PlayableTrackControls::InitMenuData *mpData{};
 
@@ -507,11 +503,6 @@ struct WaveTrackMenuTable
 
    void InitUserData(void *pUserData) override;
 
-   void DestroyMenu() override
-   {
-      //mpData = nullptr;
-   }
-
    DECLARE_POPUP_MENU(WaveTrackMenuTable);
 
    void OnMultiView(wxCommandEvent & event);
@@ -563,9 +554,10 @@ BEGIN_POPUP_MENU(WaveTrackMenuTable)
    []( PopupMenuHandler &handler ) -> bool {
       auto &project =
          static_cast< WaveTrackMenuTable& >( handler ).mpData->project;
-      return RealtimeEffectManager::Get().RealtimeIsActive() &&
+      return RealtimeEffectManager::Get(project).IsActive() &&
          ProjectAudioIO::Get( project ).IsAudioActive();
    };
+
 
    BeginSection( "SubViews" );
       // Multi-view check mark item, if more than one track sub-view type is
@@ -900,7 +892,6 @@ void WaveTrackMenuTable::OnSwapChannels(wxCommandEvent &)
    AudacityProject *const project = &mpData->project;
 
    WaveTrack *const pTrack = static_cast<WaveTrack*>(mpData->pTrack);
-   const auto linkType = pTrack->GetLinkType();
    auto channels = TrackList::Channels( pTrack );
    if (channels.size() != 2)
       return;
@@ -911,18 +902,16 @@ void WaveTrackMenuTable::OnSwapChannels(wxCommandEvent &)
 
    auto partner = *channels.rbegin();
 
-   SplitStereo(false);
+   if (TrackList::SwapChannels(*pTrack)) {
+      auto &tracks = TrackList::Get( *project );
+      if (hasFocus)
+         trackFocus.Set(partner);
 
-   auto &tracks = TrackList::Get( *project );
-   tracks.MoveUp(partner);
-   tracks.MakeMultiChannelTrack(*partner, 2, linkType == Track::LinkType::Aligned);
-   if (hasFocus)
-      trackFocus.Set(partner);
-
-   ProjectHistory::Get( *project ).PushState(
-      /* i18n-hint: The string names a track  */
-      XO("Swapped Channels in '%s'").Format( pTrack->GetName() ),
-      XO("Swap Channels"));
+      ProjectHistory::Get( *project ).PushState(
+         /* i18n-hint: The string names a track  */
+         XO("Swapped Channels in '%s'").Format( pTrack->GetName() ),
+         XO("Swap Channels"));
+   }
 
    mpData->result = RefreshCode::RefreshAll;
 }
@@ -957,7 +946,6 @@ void WaveTrackMenuTable::OnSplitStereoMono(wxCommandEvent &)
    mpData->result = RefreshAll | FixScrollbars;
 }
 
-//=============================================================================
 PopupMenuTable *WaveTrackControls::GetMenuExtension(Track * pTrack)
 {
    static Registry::OrderingPreferenceInitializer init{
@@ -1087,7 +1075,7 @@ using TCPLine = TrackInfo::TCPLine;
 static const struct WaveTrackTCPLines
    : TCPLines { WaveTrackTCPLines() {
    (TCPLines&)*this =
-      PlayableTrackControls::StaticTCPLines();
+      PlayableTrackControls::StaticWaveTCPLines();
    insert( end(), {
 
       { TCPLine::kItemGain, kTrackInfoSliderHeight, kTrackInfoSliderExtra,
@@ -1155,11 +1143,8 @@ LWSlider * WaveTrackControls::GainSlider
 (const wxRect &sliderRect, const WaveTrack *t, bool captured, wxWindow *pParent)
 {
    static std::once_flag flag;
-   std::call_once( flag, [] {
-      wxCommandEvent dummy;
-      ReCreateGainSlider( dummy );
-      wxTheApp->Bind(EVT_THEME_CHANGE, ReCreateGainSlider);
-   } );
+   std::call_once( flag, []{ ReCreateGainSlider({}); });
+   static auto subscription = theTheme.Subscribe(ReCreateGainSlider);
 
    wxPoint pos = sliderRect.GetPosition();
    float gain = t ? t->GetGain() : 1.0;
@@ -1174,10 +1159,10 @@ LWSlider * WaveTrackControls::GainSlider
    return slider;
 }
 
-void WaveTrackControls::ReCreateGainSlider( wxEvent &event )
+void WaveTrackControls::ReCreateGainSlider(ThemeChangeMessage message)
 {
-   event.Skip();
-
+   if (message.appearance)
+      return;
    const wxPoint point{ 0, 0 };
    wxRect sliderRect;
    GetGainRect(point, sliderRect);
@@ -1211,11 +1196,8 @@ LWSlider * WaveTrackControls::PanSlider
 (const wxRect &sliderRect, const WaveTrack *t, bool captured, wxWindow *pParent)
 {
    static std::once_flag flag;
-   std::call_once( flag, [] {
-      wxCommandEvent dummy;
-      ReCreatePanSlider( dummy );
-      wxTheApp->Bind(EVT_THEME_CHANGE, ReCreatePanSlider);
-   } );
+   std::call_once( flag, []{ ReCreatePanSlider({}); });
+   static auto subscription = theTheme.Subscribe(ReCreatePanSlider);
 
    wxPoint pos = sliderRect.GetPosition();
    float pan = t ? t->GetPan() : 0.0;
@@ -1230,10 +1212,10 @@ LWSlider * WaveTrackControls::PanSlider
    return slider;
 }
 
-void WaveTrackControls::ReCreatePanSlider( wxEvent &event )
+void WaveTrackControls::ReCreatePanSlider(ThemeChangeMessage message)
 {
-   event.Skip();
-
+   if (message.appearance)
+      return;
    const wxPoint point{ 0, 0 };
    wxRect sliderRect;
    GetPanRect(point, sliderRect);

@@ -48,6 +48,7 @@
 #include "ProjectManager.h"
 #include "ProjectWindow.h"
 #include "SelectUtilities.h"
+#include "Track.h"
 #include "commands/CommandManager.h"
 #include "effects/Effect.h"
 #include "../images/Arrow.xpm"
@@ -445,6 +446,13 @@ void ApplyMacroDialog::OnApplyToFiles(wxCommandEvent & WXUNUSED(event))
       // Move global clipboard contents aside temporarily
       Clipboard tempClipboard;
       auto &globalClipboard = Clipboard::Get();
+
+      // DV: Macro invocation on file will reset the project to the
+      // initial state. There is a possibility, that clipboard will contain
+      // references to the data removed
+      if (globalClipboard.Project().lock().get() == project)
+         globalClipboard.Clear();
+
       globalClipboard.Swap(tempClipboard);
       auto cleanup = finally([&]{
          globalClipboard.Swap(tempClipboard);

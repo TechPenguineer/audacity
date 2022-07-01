@@ -11,13 +11,16 @@ Paul Licameli split from TrackPanel.cpp
 #ifndef __AUDACITY_COMMON_TRACK_PANEL_CELL__
 #define __AUDACITY_COMMON_TRACK_PANEL_CELL__
 
-
-#include "../../TrackPanelCell.h"
+#include "TrackPanelCell.h"
+#include "TrackAttachment.h" // to inherit
 
 #include <stdlib.h>
 #include <memory>
 #include <functional>
 #include "ComponentInterfaceSymbol.h"
+#include "GlobalVariable.h"
+
+#include "XMLTagHandler.h"
 
 class CommandContext;
 class Track;
@@ -27,12 +30,10 @@ class AUDACITY_DLL_API CommonTrackPanelCell /* not final */
    : public TrackPanelCell
 {
 public:
-   // Type of function to dispatch mouse wheel events
-   using Hook = std::function<
+   // Function to dispatch mouse wheel events
+   struct AUDACITY_DLL_API MouseWheelHook : GlobalHook<MouseWheelHook,
       unsigned(const TrackPanelMouseEvent &evt, AudacityProject *pProject)
-   >;
-   // Install a dispatcher function, returning the previous function
-   static Hook InstallMouseWheelHook( const Hook &hook );
+   >{};
 
    CommonTrackPanelCell()
    {}
@@ -95,26 +96,16 @@ protected:
 };
 
 class AUDACITY_DLL_API CommonTrackCell /* not final */
-   : public CommonTrackPanelCell
+   : public CommonTrackPanelCell, public TrackAttachment
 {
 public:
    explicit CommonTrackCell( const std::shared_ptr<Track> &pTrack );
 
   ~CommonTrackCell();
 
-   // Copy state, for undo/redo purposes
-   // The default does nothing
-   virtual void CopyTo( Track &track ) const;
-
    std::shared_ptr<Track> DoFindTrack() override;
 
-   virtual void Reparent( const std::shared_ptr<Track> &parent );
-
-   // default does nothing
-   virtual void WriteXMLAttributes( XMLWriter & ) const;
-
-   // default recognizes no attributes, and returns false
-   virtual bool HandleXMLAttribute( const wxChar *attr, const wxChar *value );
+   void Reparent( const std::shared_ptr<Track> &parent ) override;
 
 private:
    std::weak_ptr< Track > mwTrack;

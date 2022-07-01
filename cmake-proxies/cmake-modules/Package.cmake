@@ -15,6 +15,7 @@ endif()
 # Custom variables use CPACK_AUDACITY_ prefix. CPACK_ to expose to CPack,
 # AUDACITY_ to show it is custom and avoid conflicts with other projects.
 set(CPACK_AUDACITY_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
+set(CPACK_AUDACITY_BUILD_DIR "${CMAKE_BINARY_DIR}")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Windows")
    set(os "win")
@@ -63,14 +64,16 @@ elseif( CMAKE_SYSTEM_NAME STREQUAL "Darwin" )
       set( CPACK_PERFORM_NOTARIZATION ${${_OPT}perform_notarization} )
 
       # CPACK_POST_BUILD_SCRIPTS was added in 3.19, but we only need it on macOS
-      SET( CPACK_POST_BUILD_SCRIPTS "${CMAKE_SOURCE_DIR}/scripts/build/macOS/DMGSign.cmake" )
+      set( CPACK_POST_BUILD_SCRIPTS "${CMAKE_SOURCE_DIR}/scripts/build/macOS/DMGSign.cmake" )
    endif()
+elseif (CMAKE_SYSTEM_NAME MATCHES "Windows")
+   set( CPACK_GENERATOR ZIP )
 endif()
 
 if( CMAKE_GENERATOR MATCHES "Makefiles|Ninja" )
    set( CPACK_SOURCE_GENERATOR "TGZ" )
-   set( CPACK_AUDACITY_BUILD_DIR "${CMAKE_BINARY_DIR}")
 
+   set( CPACK_SOURCE_PACKAGE_FILE_NAME "audacity-sources-${CPACK_PACKAGE_VERSION}" )
    list( APPEND CPACK_PRE_BUILD_SCRIPTS "${CMAKE_SOURCE_DIR}/cmake-proxies/cmake-modules/CopySourceVariables.cmake" )
 
    set(CPACK_SOURCE_IGNORE_FILES
@@ -78,7 +81,8 @@ if( CMAKE_GENERATOR MATCHES "Makefiles|Ninja" )
       "/.vscode"
       "/.idea"
       "/.*build.*"
-      "/conan-home"
+      "/.conan"
+      "requirements.txt"
       "/\\\\.DS_Store"
    )
 endif()

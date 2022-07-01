@@ -214,20 +214,6 @@ const CommandManager &CommandManager::Get( const AudacityProject &project )
    return Get( const_cast< AudacityProject & >( project ) );
 }
 
-static CommandManager::MenuHook &sMenuHook()
-{
-   static CommandManager::MenuHook theHook;
-   return theHook;
-}
-
-auto CommandManager::SetMenuHook( const MenuHook &hook ) -> MenuHook
-{
-   auto &theHook = sMenuHook();
-   auto result = theHook;
-   theHook = hook;
-   return result;
-}
-
 ///
 ///  Standard Constructor
 ///
@@ -1329,8 +1315,7 @@ bool CommandManager::HandleMenuID(
    mLastProcessId = id;
    CommandListEntry *entry = mCommandNumericIDHash[id];
 
-   auto hook = sMenuHook();
-   if (hook && hook(entry->name))
+   if (GlobalMenuHook::Call(entry->name))
       return true;
 
    return HandleCommandEntry( project, entry, flags, alwaysEnabled );
@@ -1532,27 +1517,30 @@ NormalizedKeyString CommandManager::GetDefaultKeyFromName(const CommandID &name)
    return entry->defaultKey;
 }
 
-bool CommandManager::HandleXMLTag(const wxChar *tag, const wxChar **attrs)
+bool CommandManager::HandleXMLTag(const std::string_view& tag, const AttributesList &attrs)
 {
-   if (!wxStrcmp(tag, wxT("audacitykeyboard"))) {
+   if (tag == "audacitykeyboard") {
       mXMLKeysRead = 0;
    }
 
-   if (!wxStrcmp(tag, wxT("command"))) {
+   if (tag == "command") {
       wxString name;
       NormalizedKeyString key;
 
-      while(*attrs) {
-         const wxChar *attr = *attrs++;
-         const wxChar *value = *attrs++;
+      for (auto pair : attrs)
+      {
+         auto attr = pair.first;
+         auto value = pair.second;
 
-         if (!value)
-            break;
+         if (value.IsStringView())
+         {
+            const wxString strValue = value.ToWString();
 
-         if (!wxStrcmp(attr, wxT("name")) && XMLValueChecker::IsGoodString(value))
-            name = value;
-         if (!wxStrcmp(attr, wxT("key")) && XMLValueChecker::IsGoodString(value))
-            key = NormalizedKeyString{ value };
+            if (attr == "name")
+               name = strValue;
+            else if (attr == "key")
+               key = NormalizedKeyString{ strValue };
+         }
       }
 
       if (mCommandNameHash[name]) {
@@ -1565,10 +1553,10 @@ bool CommandManager::HandleXMLTag(const wxChar *tag, const wxChar **attrs)
 }
 
 // This message is displayed now in KeyConfigPrefs::OnImport()
-void CommandManager::HandleXMLEndTag(const wxChar *tag)
+void CommandManager::HandleXMLEndTag(const std::string_view& tag)
 {
    /*
-   if (!wxStrcmp(tag, wxT("audacitykeyboard"))) {
+   if (tag == "audacitykeyboard") {
       AudacityMessageBox(
          XO("Loaded %d keyboard shortcuts\n")
             .Format( mXMLKeysRead ),
@@ -1578,7 +1566,7 @@ void CommandManager::HandleXMLEndTag(const wxChar *tag)
    */
 }
 
-XMLTagHandler *CommandManager::HandleXMLChild(const wxChar * WXUNUSED(tag))
+XMLTagHandler *CommandManager::HandleXMLChild(const std::string_view&  WXUNUSED(tag))
 {
    return this;
 }
@@ -1709,25 +1697,21 @@ void CommandManager::RemoveDuplicateShortcuts()
 
 #include "../KeyboardCapture.h"
 
-static struct InstallHandlers
-{
-   InstallHandlers()
-   {
-      KeyboardCapture::SetPreFilter( []( wxKeyEvent & ) {
-         // We must have a project since we will be working with the
-         // CommandManager, which is tied to individual projects.
-         auto project = GetActiveProject().lock();
-         return project && GetProjectFrame( *project ).IsEnabled();
-      } );
-      KeyboardCapture::SetPostFilter( []( wxKeyEvent &key ) {
-         // Capture handler window didn't want it, so ask the CommandManager.
-         if (auto project = GetActiveProject().lock()) {
-            auto &manager = CommandManager::Get( *project );
-            return manager.FilterKeyEvent(project.get(), key);
-         }
-         else
-            return false;
-      } );
+static KeyboardCapture::PreFilter::Scope scope1{
+[]( wxKeyEvent & ) {
+   // We must have a project since we will be working with the
+   // CommandManager, which is tied to individual projects.
+   auto project = GetActiveProject().lock();
+   return project && GetProjectFrame( *project ).IsEnabled();
+} };
+static KeyboardCapture::PostFilter::Scope scope2{
+[]( wxKeyEvent &key ) {
+   // Capture handler window didn't want it, so ask the CommandManager.
+   if (auto project = GetActiveProject().lock()) {
+      auto &manager = CommandManager::Get( *project );
+      return manager.FilterKeyEvent(project.get(), key);
    }
-} installHandlers;
+   else
+      return false;
+} };
 

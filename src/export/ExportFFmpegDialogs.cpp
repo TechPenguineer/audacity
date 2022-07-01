@@ -5,7 +5,7 @@
    ExportFFmpegDialogs.cpp
 
    Audacity(R) is copyright (c) 1999-2010 Audacity Team.
-   License: GPL v2.  See License.txt.
+   License: GPL v2 or later.  See License.txt.
 
    LRN
 
@@ -62,7 +62,7 @@
 
 #include "../widgets/FileDialog/FileDialog.h"
 
-#include "../Mix.h"
+#include "Mix.h"
 #include "../Tags.h"
 #include "../widgets/AudacityMessageBox.h"
 #include "../widgets/HelpSystem.h"
@@ -213,6 +213,8 @@ ExportFFmpegAC3Options::~ExportFFmpegAC3Options()
 ///
 void ExportFFmpegAC3Options::PopulateOrExchange(ShuttleGui & S)
 {
+   IntSetting Setting{ L"/FileFormats/AC3BitRate", 160000 };
+
    S.StartVerticalLay();
    {
       S.StartHorizontalLay(wxCENTER);
@@ -220,12 +222,7 @@ void ExportFFmpegAC3Options::PopulateOrExchange(ShuttleGui & S)
          S.StartMultiColumn(2, wxCENTER);
          {
             S.TieNumberAsChoice(
-               XXO("Bit Rate:"),
-               {wxT("/FileFormats/AC3BitRate"),
-                160000},
-               AC3BitRateNames,
-               &AC3BitRateValues
-            );
+               XXO("Bit Rate:"), Setting, AC3BitRateNames, &AC3BitRateValues);
          }
          S.EndMultiColumn();
       }
@@ -368,19 +365,15 @@ ExportFFmpegAMRNBOptions::~ExportFFmpegAMRNBOptions()
 ///
 void ExportFFmpegAMRNBOptions::PopulateOrExchange(ShuttleGui & S)
 {
+   IntSetting Setting{ L"/FileFormats/AMRNBBitRate", 12200 };
    S.StartVerticalLay();
    {
       S.StartHorizontalLay(wxCENTER);
       {
          S.StartMultiColumn(2, wxCENTER);
          {
-            S.TieNumberAsChoice(
-               XXO("Bit Rate:"),
-               {wxT("/FileFormats/AMRNBBitRate"),
-                12200},
-               AMRNBBitRateNames,
-               &AMRNBBitRateValues
-            );
+            S.TieNumberAsChoice(XXO("Bit Rate:"), Setting,
+               AMRNBBitRateNames, &AMRNBBitRateValues);
          }
          S.EndMultiColumn();
       }
@@ -727,19 +720,15 @@ ExportFFmpegWMAOptions::~ExportFFmpegWMAOptions()
 ///
 void ExportFFmpegWMAOptions::PopulateOrExchange(ShuttleGui & S)
 {
+   IntSetting Setting{ L"/FileFormats/WMABitRate", 128000 };
    S.StartVerticalLay();
    {
       S.StartHorizontalLay(wxCENTER);
       {
          S.StartMultiColumn(2, wxCENTER);
          {
-            S.TieNumberAsChoice(
-               XXO("Bit Rate:"),
-               {wxT("/FileFormats/WMABitRate"),
-                128000},
-               WMABitRateNames,
-               &WMABitRateValues
-            );
+            S.TieNumberAsChoice(XXO("Bit Rate:"),
+               Setting, WMABitRateNames, &WMABitRateValues);
          }
          S.EndMultiColumn();
       }
@@ -1142,34 +1131,33 @@ void FFmpegPresets::LoadPreset(ExportFFmpegOptions *parent, wxString &name)
    }
 }
 
-bool FFmpegPresets::HandleXMLTag(const wxChar *tag, const wxChar **attrs)
+bool FFmpegPresets::HandleXMLTag(const std::string_view& tag, const AttributesList &attrs)
 {
    if (mAbortImport)
    {
       return false;
    }
 
-   if (!wxStrcmp(tag,wxT("ffmpeg_presets")))
+   if (tag == "ffmpeg_presets")
    {
       return true;
    }
 
-   if (!wxStrcmp(tag,wxT("preset")))
+   if (tag == "preset")
    {
-      while (*attrs)
+      for (auto pair : attrs)
       {
-         const wxChar *attr = *attrs++;
-         wxString value = *attrs++;
+         auto attr = pair.first;
+         auto value = pair.second;
 
-         if (!value)
-            break;
-
-         if (!wxStrcmp(attr,wxT("name")))
+         if (attr == "name")
          {
-            mPreset = FindPreset(value);
+            wxString strValue = value.ToWString();
+            mPreset = FindPreset(strValue);
+
             if (mPreset)
             {
-               auto query = XO("Replace preset '%s'?").Format( value );
+               auto query = XO("Replace preset '%s'?").Format( strValue );
                int action = AudacityMessageBox(
                   query,
                   XO("Confirm Overwrite"),
@@ -1188,35 +1176,33 @@ bool FFmpegPresets::HandleXMLTag(const wxChar *tag, const wxChar **attrs)
             }
             else
             {
-               mPreset = &mPresets[value];
+               mPreset = &mPresets[strValue];
             }
-            mPreset->mPresetName = value;
+
+            mPreset->mPresetName = strValue;
          }
       }
       return true;
    }
 
-   if (!wxStrcmp(tag,wxT("setctrlstate")) && mPreset)
+   if (tag == "setctrlstate" && mPreset)
    {
       long id = -1;
-      while (*attrs)
+      for (auto pair : attrs)
       {
-         const wxChar *attr = *attrs++;
-         const wxChar *value = *attrs++;
+         auto attr = pair.first;
+         auto value = pair.second;
 
-         if (!value)
-            break;
-
-         if (!wxStrcmp(attr,wxT("id")))
+         if (attr == "id")
          {
             for (long i = FEFirstID; i < FELastID; i++)
-               if (!wxStrcmp(FFmpegExportCtrlIDNames[i - FEFirstID],value))
+               if (!wxStrcmp(FFmpegExportCtrlIDNames[i - FEFirstID], value.ToWString()))
                   id = i;
          }
-         else if (!wxStrcmp(attr,wxT("state")))
+         else if (attr == "state")
          {
             if (id > FEFirstID && id < FELastID)
-               mPreset->mControlState[id - FEFirstID] = wxString(value);
+               mPreset->mControlState[id - FEFirstID] = value.ToWString();
          }
       }
       return true;
@@ -1225,18 +1211,18 @@ bool FFmpegPresets::HandleXMLTag(const wxChar *tag, const wxChar **attrs)
    return false;
 }
 
-XMLTagHandler *FFmpegPresets::HandleXMLChild(const wxChar *tag)
+XMLTagHandler *FFmpegPresets::HandleXMLChild(const std::string_view& tag)
 {
    if (mAbortImport)
    {
       return NULL;
    }
 
-   if (!wxStrcmp(tag, wxT("preset")))
+   if (tag == "preset")
    {
       return this;
    }
-   else if (!wxStrcmp(tag, wxT("setctrlstate")))
+   else if (tag == "setctrlstate")
    {
       return this;
    }
@@ -1606,7 +1592,7 @@ CompatibilityEntry ExportFFmpegOptions::CompatibilityList[] =
 
 /// AAC profiles
 // The FF_PROFILE_* enumeration is defined in the ffmpeg library
-// PRL:  I cant find where this preference is used!
+// PRL:  I can't find where this preference is used!
 ChoiceSetting AACProfiles { wxT("/FileFormats/FFmpegAACProfile"),
    {
       {wxT("1") /*FF_PROFILE_AAC_LOW*/, XO("LC")},
@@ -1822,6 +1808,9 @@ void ExportFFmpegOptions::FetchCodecList()
 ///
 void ExportFFmpegOptions::PopulateOrExchange(ShuttleGui & S)
 {
+   IntSetting PredictionOrderSetting{ L"/FileFormats/FFmpegPredOrderMethod",
+      4 };  // defaults to Full search
+
    S.StartVerticalLay(1);
    S.StartMultiColumn(1, wxEXPAND);
    {
@@ -1938,8 +1927,7 @@ void ExportFFmpegOptions::PopulateOrExchange(ShuttleGui & S)
                      .MinSize( { 100, -1 } )
                      .TieNumberAsChoice(
                         XXO("PdO Method:"),
-                        {wxT("/FileFormats/FFmpegPredOrderMethod"),
-                         4}, // Full search
+                        PredictionOrderSetting,
                         PredictionOrderMethodNames
                      );
 

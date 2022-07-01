@@ -92,11 +92,23 @@ ln -sf share/icons/hicolor/scalable/apps/audacity.svg "${appdir}/.DirIcon"
 # them to LD_LIBRARY_PATH so that linuxdeploy can find them.
 export LD_LIBRARY_PATH="${appdir}/usr/lib:${appdir}/usr/lib/audacity:${LD_LIBRARY_PATH-}"
 
+# When running on GitHub actions - libararies are sometimes installed into the DEB_HOST_MULTIARCH
+# based location
+if [ -f "/etc/debian_version" ]; then
+   archDir=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+   export LD_LIBRARY_PATH="${appdir}/usr/lib/${archDir}:${appdir}/usr/lib/${archDir}/audacity:${LD_LIBRARY_PATH-}"
+fi
+
 # Prevent linuxdeploy setting RUNPATH in binaries that shouldn't have it
 mv "${appdir}/bin/findlib" "${appdir}/../findlib"
 
 linuxdeploy --appdir "${appdir}" # add all shared library dependencies
-rm -R "${appdir}/lib/audacity"
+rm -Rf "${appdir}/lib/audacity"
+
+if [ -f "/etc/debian_version" ]; then
+   archDir=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+   rm -Rf "${appdir}/lib/${archDir}/audacity"
+fi
 
 # Put the non-RUNPATH binaries back
 mv "${appdir}/../findlib" "${appdir}/bin/findlib"
@@ -134,14 +146,15 @@ unwanted_files=(
 
 fallback_libraries=(
   libatk-1.0.so.0 # This will possibly prevent browser from opening
-  libatk-bridge-2.0.so.0 
+  libatk-bridge-2.0.so.0
   libcairo.so.2 # This breaks FFmpeg support
   libcairo-gobject.so.2
   libjack.so.0 # https://github.com/LMMS/lmms/pull/3958
   libportaudio.so # This is required to enable system PortAudio (so Jack is enabled!)
   libgmodule-2.0.so.0 # Otherwise - Manjaro/Arch will crash, because of libgio mismatch
   # But if gmodule is present - glib2 is too
-  # Some ot the GTK libraries are balcklisted from being included
+  # Some of the GTK libraries are balcklisted from being included
+  # by the AppImage builder itself
   # libgio-2.0.so.0
   # libglib-2.0.so.0
   # libgobject-2.0.so.0

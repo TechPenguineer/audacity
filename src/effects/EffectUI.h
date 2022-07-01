@@ -7,7 +7,7 @@
   Leland Lucius
 
   Audacity(R) is copyright (c) 1999-2008 Audacity Team.
-  License: GPL v2.  See License.txt.
+  License: GPL v2 or later.  See License.txt.
 
 **********************************************************************/
 
@@ -16,94 +16,15 @@
 
 #include <wx/bitmap.h> // member variables
 
+#include <optional>
+
 #include "Identifier.h"
+#include "EffectPlugin.h"
+#include "Observer.h"
 #include "PluginInterface.h"
+#include "effects/RealtimeEffectManager.h"
 
-#if defined(EXPERIMENTAL_EFFECTS_RACK)
-
-#include <vector>
-
-#include <wx/defs.h>
-#include <wx/frame.h> // to inherit
-#include <wx/timer.h> // member variable
-
-class wxFlexGridSizer;
-class wxPanel;
-class wxStaticText;
-
-class AudacityProject;
-
-class Effect;
-using EffectArray = std::vector<Effect*>;
-
-class EffectRack final : public wxFrame
-{
-public:
-   EffectRack( AudacityProject &project );
-   virtual ~EffectRack();
-
-   void Add(Effect *effect, bool active = false, bool favorite = false);
-
-   static EffectRack &Get( AudacityProject &project );
-
-private:
-
-   wxBitmap CreateBitmap(const char *const xpm[], bool up, bool pusher);
-   int GetEffectIndex(wxWindow *win);
-   void MoveRowUp(int row);
-   void UpdateActive();
-
-   void OnClose(wxCloseEvent & evt);
-   void OnTimer(wxTimerEvent & evt);
-   void OnApply(wxCommandEvent & evt);
-   void OnBypass(wxCommandEvent & evt);
-
-   void OnPower(wxCommandEvent & evt);
-   void OnEditor(wxCommandEvent & evt);
-   void OnUp(wxCommandEvent & evt);
-   void OnDown(wxCommandEvent & evt);
-   void OnFav(wxCommandEvent & evt);
-   void OnRemove(wxCommandEvent & evt);
-
-private:
-   AudacityProject &mProject;
-
-   wxStaticText *mLatency;
-   int mLastLatency;
-
-   wxBitmap mPowerPushed;
-   wxBitmap mPowerRaised;
-   wxBitmap mSettingsPushed;
-   wxBitmap mSettingsRaised;
-   wxBitmap mUpPushed;
-   wxBitmap mUpRaised;
-   wxBitmap mUpDisabled;
-   wxBitmap mDownPushed;
-   wxBitmap mDownRaised;
-   wxBitmap mDownDisabled;
-   wxBitmap mFavPushed;
-   wxBitmap mFavRaised;
-   wxBitmap mRemovePushed;
-   wxBitmap mRemoveRaised;
-
-   std::vector<int> mPowerState;
-   std::vector<int> mFavState;
-
-   int mNumEffects;
-
-   wxTimer mTimer;
-
-   wxPanel *mPanel;
-   wxFlexGridSizer *mMainSizer;
-
-   EffectArray mEffects;
-   EffectArray mActive;
-   bool mBypassing;
-
-   DECLARE_EVENT_TABLE()
-};
-
-#endif
+struct AudioIOEvent;
 
 #include "EffectInterface.h"
 #include "widgets/wxPanelWrapper.h" // to inherit
@@ -112,24 +33,24 @@ private:
 
 class AudacityCommand;
 class AudacityProject;
-class Effect;
+class RealtimeEffectState;
 
 class wxCheckBox;
 
 //
-class EffectUIHost final : public wxDialogWrapper,
-                     public EffectUIHostInterface
+class EffectUIHost final : public wxDialogWrapper
 {
 public:
    // constructors and destructors
-   EffectUIHost(wxWindow *parent,
-                AudacityProject &project,
-                Effect *effect,
-                EffectUIClientInterface *client);
-   EffectUIHost(wxWindow *parent,
-                AudacityProject &project,
-                AudacityCommand *command,
-                EffectUIClientInterface *client);
+   /*
+    @param[out] pInstance may construct
+    (and then must call Init() with success), or leave null for failure
+    */
+   EffectUIHost(wxWindow *parent, AudacityProject &project,
+      EffectPlugin &effect, EffectUIClientInterface &client,
+      std::shared_ptr<EffectInstance> &pInstance,
+      EffectSettingsAccess &access,
+      const std::shared_ptr<RealtimeEffectState> &pPriorState = {});
    virtual ~EffectUIHost();
 
    bool TransferDataToWindow() override;
@@ -140,6 +61,8 @@ public:
    bool Initialize();
 
 private:
+   std::shared_ptr<EffectInstance> InitializeInstance();
+
    wxPanel *BuildButtonBar( wxWindow *parent );
 
    void OnInitDialog(wxInitDialogEvent & evt);
@@ -156,8 +79,8 @@ private:
    void OnPlay(wxCommandEvent & evt);
    void OnRewind(wxCommandEvent & evt);
    void OnFFwd(wxCommandEvent & evt);
-   void OnPlayback(wxCommandEvent & evt);
-   void OnCapture(wxCommandEvent & evt);
+   void OnPlayback(AudioIOEvent);
+   void OnCapture(AudioIOEvent);
    void OnUserPreset(wxCommandEvent & evt);
    void OnFactoryPreset(wxCommandEvent & evt);
    void OnDeletePreset(wxCommandEvent & evt);
@@ -171,50 +94,62 @@ private:
    wxBitmap CreateBitmap(const char * const xpm[], bool up, bool pusher);
    void LoadUserPresets();
 
-   void InitializeRealtime();
    void CleanupRealtime();
-   void Resume();
 
 private:
-   AudacityProject *mProject;
-   wxWindow *mParent;
-   Effect *mEffect;
-   AudacityCommand * mCommand;
-   EffectUIClientInterface *mClient;
+   Observer::Subscription mSubscription;
+
+   AudacityProject &mProject;
+   wxWindow *const mParent;
+   EffectPlugin &mEffectUIHost;
+   EffectUIClientInterface &mClient;
+   //! @invariant not null
+   const EffectPlugin::EffectSettingsAccessPtr mpGivenAccess;
+   EffectPlugin::EffectSettingsAccessPtr mpAccess;
+   EffectPlugin::EffectSettingsAccessPtr mpAccess2;
+   std::shared_ptr<RealtimeEffectState> mpState{};
+   std::unique_ptr<EffectUIValidator> mpValidator;
 
    RegistryPaths mUserPresets;
-   bool mInitialized;
-   bool mSupportsRealtime;
-   bool mIsGUI;
-   bool mIsBatch;
+   bool mInitialized{ false };
+   const bool mSupportsRealtime;
+   bool mIsGUI{};
+   bool mIsBatch{};
 
-   wxButton *mApplyBtn;
-   wxButton *mCloseBtn;
-   wxButton *mMenuBtn;
-   wxButton *mPlayBtn;
-   wxButton *mRewindBtn;
-   wxButton *mFFwdBtn;
-   wxCheckBox *mEnableCb;
+   wxButton *mApplyBtn{};
+   wxButton *mCloseBtn{};
+   wxButton *mMenuBtn{};
+   wxButton *mPlayBtn{};
+   wxButton *mRewindBtn{};
+   wxButton *mFFwdBtn{};
+   wxCheckBox *mEnableCb{};
 
-   wxButton *mEnableToggleBtn;
-   wxButton *mPlayToggleBtn;
+   wxButton *mEnableToggleBtn{};
+   wxButton *mPlayToggleBtn{};
 
    wxBitmap mPlayBM;
    wxBitmap mPlayDisabledBM;
    wxBitmap mStopBM;
    wxBitmap mStopDisabledBM;
 
-   bool mEnabled;
+   bool mEnabled{ true };
 
-   bool mDisableTransport;
-   bool mPlaying;
-   bool mCapturing;
+   bool mDisableTransport{ true };
+   bool mPlaying{};
+   bool mCapturing{};
 
    SelectedRegion mRegion;
-   double mPlayPos;
+   double mPlayPos{ 0.0 };
 
    bool mDismissed{};
-   bool mNeedsResume{};
+   std::optional<RealtimeEffects::SuspensionScope> mSuspensionScope;
+
+#if wxDEBUG_LEVEL
+   // Used only in an assertion
+   bool mClosed{ false };
+#endif
+
+   const std::shared_ptr<EffectInstance> mpInstance;
 
    DECLARE_EVENT_TABLE()
 };
@@ -224,8 +159,10 @@ class CommandContext;
 namespace  EffectUI {
 
    AUDACITY_DLL_API
-   wxDialog *DialogFactory( wxWindow &parent, EffectHostInterface *pHost,
-      EffectUIClientInterface *client);
+   wxDialog *DialogFactory( wxWindow &parent, EffectPlugin &host,
+      EffectUIClientInterface &client,
+      std::shared_ptr<EffectInstance> &pInstance,
+      EffectSettingsAccess &access);
 
    /** Run an effect given the plugin ID */
    // Returns true on success.  Will only operate on tracks that

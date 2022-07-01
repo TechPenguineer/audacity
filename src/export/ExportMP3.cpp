@@ -81,7 +81,7 @@
 
 #include "FileNames.h"
 #include "float_cast.h"
-#include "../Mix.h"
+#include "Mix.h"
 #include "Prefs.h"
 #include "ProjectRate.h"
 #include "../ProjectSettings.h"
@@ -89,11 +89,12 @@
 #include "../SelectFile.h"
 #include "../ShuttleGui.h"
 #include "../Tags.h"
-#include "../Track.h"
+#include "Track.h"
 #include "../widgets/HelpSystem.h"
 #include "../widgets/AudacityMessageBox.h"
 #include "../widgets/ProgressDialog.h"
 #include "wxFileNameWrapper.h"
+#include "Project.h"
 
 #include "Export.h"
 
@@ -402,9 +403,11 @@ void ExportMP3Options::PopulateOrExchange(ShuttleGui & S)
                      break;
                }
 
+               IntSetting Setting{ L"/FileFormats/MP3Bitrate", defrate };
+
                mRate = S.Id(ID_QUALITY).TieNumberAsChoice(
                   XXO("Quality"),
-                  { wxT("/FileFormats/MP3Bitrate"), defrate },
+                  Setting,
                   *choices,
                   codes
                );
@@ -925,7 +928,7 @@ MP3Exporter::MP3Exporter()
 // We could use #defines rather than this variable.
 // The idea of the variable is that if we wanted, we could allow
 // a dynamic override of the library, e.g. with a newer faster version,
-// or to fix CVEs in the underlying librray.
+// or to fix CVEs in the underlying library.
 // for now though the 'variable' is a constant.
 #ifdef MP3_EXPORT_BUILT_IN
    mLibIsExternal = false;
@@ -1834,7 +1837,6 @@ ProgressResult ExportMP3::Export(AudacityProject *project,
       bitrate = fixRateValues[ brate ];
       exporter.SetMode(MODE_ABR);
       exporter.SetBitrate(bitrate);
-
       if (bitrate > 160) {
          lowrate = 32000;
       }
@@ -1859,11 +1861,32 @@ ProgressResult ExportMP3::Export(AudacityProject *project,
    // Verify sample rate
    if (!make_iterator_range( sampRates ).contains( rate ) ||
       (rate < lowrate) || (rate > highrate)) {
-      rate = AskResample(bitrate, rate, lowrate, highrate);
-      if (rate == 0) {
-         return ProgressResult::Cancelled;
-      }
-   }
+        // Force valid sample rate in macros.
+		if (project->mBatchMode) {
+			if (!make_iterator_range( sampRates ).contains( rate )) {
+				auto const bestRateIt = std::lower_bound(sampRates.begin(),
+				sampRates.end(), rate);
+				rate = (bestRateIt == sampRates.end()) ? highrate : *bestRateIt;
+			}
+			if (rate < lowrate) {
+				rate = lowrate;
+			}
+			else if (rate > highrate) {
+				rate = highrate;
+			}
+		}
+		// else validate or prompt
+		else {
+			if (!make_iterator_range( sampRates ).contains( rate ) ||
+				(rate < lowrate) || (rate > highrate)) {
+				rate = AskResample(bitrate, rate, lowrate, highrate);
+			}
+			if (rate == 0) {
+				return ProgressResult::Cancelled;
+       
+			}
+		}
+	}
 
    // Set the channel mode
    if (forceMono) {

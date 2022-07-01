@@ -14,29 +14,15 @@ Paul Licameli split from TrackPanel.cpp
 #include <wx/event.h>
 #include <wx/menu.h>
 
+#include "../../widgets/BasicMenu.h"
+#include "BasicUI.h"
 #include "../../commands/CommandContext.h"
 #include "../../commands/CommandManager.h"
 #include "../../HitTestResult.h"
 #include "../../RefreshCode.h"
 #include "../../TrackPanelMouseEvent.h"
 #include "ViewInfo.h"
-
-namespace {
-   CommonTrackPanelCell::Hook &GetHook()
-   {
-      static CommonTrackPanelCell::Hook theHook;
-      return theHook;
-   }
-}
-
-auto CommonTrackPanelCell::InstallMouseWheelHook( const Hook &hook )
-   -> Hook
-{
-   auto &theHook = GetHook();
-   auto result = theHook;
-   theHook = hook;
-   return result;
-}
+#include "../../widgets/wxWidgetsWindowPlacement.h"
 
 CommonTrackPanelCell::~CommonTrackPanelCell()
 {
@@ -108,7 +94,13 @@ unsigned CommonTrackPanelCell::DoContextMenu( const wxRect &rect,
       ++ii;
    }
    
-   pParent->PopupMenu(&menu, pPoint ? *pPoint : wxDefaultPosition);
+   BasicUI::Point point;
+   if (pPoint)
+      point = { pPoint->x, pPoint->y };
+   BasicMenu::Handle{ &menu }.Popup(
+      wxWidgetsWindowPlacement{ pParent },
+      point
+   );
 
    return RefreshCode::RefreshNone;
 }
@@ -116,7 +108,7 @@ unsigned CommonTrackPanelCell::DoContextMenu( const wxRect &rect,
 unsigned CommonTrackPanelCell::HandleWheelRotation
 (const TrackPanelMouseEvent &evt, AudacityProject *pProject)
 {
-   auto hook = GetHook();
+   auto &hook = MouseWheelHook::Get();
    return hook ? hook( evt, pProject ) : RefreshCode::Cancelled;
 }
 
@@ -126,10 +118,6 @@ CommonTrackCell::CommonTrackCell( const std::shared_ptr< Track > &parent )
 
 CommonTrackCell::~CommonTrackCell() = default;
 
-void CommonTrackCell::CopyTo( Track& ) const
-{
-}
-
 void CommonTrackCell::Reparent( const std::shared_ptr<Track> &parent )
 {
    mwTrack = parent;
@@ -138,13 +126,4 @@ void CommonTrackCell::Reparent( const std::shared_ptr<Track> &parent )
 std::shared_ptr<Track> CommonTrackCell::DoFindTrack()
 {
    return mwTrack.lock();
-}
-
-void CommonTrackCell::WriteXMLAttributes( XMLWriter & ) const
-{
-}
-
-bool CommonTrackCell::HandleXMLAttribute( const wxChar *, const wxChar * )
-{
-   return false;
 }

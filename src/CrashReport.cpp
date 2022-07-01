@@ -28,7 +28,7 @@
 #include "Languages.h"
 #include "Project.h"
 #include "ProjectFileIO.h"
-#include "prefs/GUIPrefs.h"
+#include "prefs/GUISettings.h"
 #include "widgets/AudacityTextEntryDialog.h"
 
 namespace CrashReport {
@@ -53,7 +53,7 @@ void Generate(wxDebugReport::Context ctx)
       std::atomic_bool done = {false};
       auto thread = std::thread([&]
       {
-         wxFileNameWrapper fn{ FileNames::DataDir(), wxT("audacity.cfg") };
+         wxFileNameWrapper fn{ FileNames::Configuration() };
          rpt.AddFile(fn.GetFullPath(), _TS("Audacity Configuration"));
          rpt.AddFile(FileNames::PluginRegistry(), wxT("Plugin Registry"));
          rpt.AddFile(FileNames::PluginSettings(), wxT("Plugin Settings"));
@@ -61,8 +61,8 @@ void Generate(wxDebugReport::Context ctx)
          if (ctx == wxDebugReport::Context_Current)
          {
             auto saveLang = Languages::GetLangShort();
-            GUIPrefs::SetLang( wxT("en") );
-            auto cleanup = finally( [&]{ GUIPrefs::SetLang( saveLang ); } );
+            GUISettings::SetLang( wxT("en") );
+            auto cleanup = finally( [&]{ GUISettings::SetLang( saveLang ); } );
       
             auto gAudioIO = AudioIOBase::Get();
             for (const auto &diagnostics : gAudioIO->GetAllDeviceInfo())
@@ -87,7 +87,8 @@ void Generate(wxDebugReport::Context ctx)
       // Wait for information to be gathered
       while (!done)
       {
-         wxMilliSleep(50);
+         using namespace std::chrono;
+         std::this_thread::sleep_for(50ms);
          pd->Pulse();
       }
       thread.join();

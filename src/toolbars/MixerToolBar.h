@@ -11,6 +11,7 @@
 #ifndef __AUDACITY_MIXER_TOOLBAR__
 #define __AUDACITY_MIXER_TOOLBAR__
 
+#include "Observer.h"
 #include "ToolBar.h"
 
 class wxSize;
@@ -18,6 +19,7 @@ class wxPoint;
 
 class ASlider;
 class AudacityProject;
+struct AudioIOEvent;
 
 class MixerToolBar final : public ToolBar {
 
@@ -39,14 +41,14 @@ class MixerToolBar final : public ToolBar {
    void Repaint(wxDC * WXUNUSED(dc)) override {};
    void EnableDisableButtons() override {};
    int GetMinToolbarWidth() override { return 250; }
-   int GetInitialWidth()  override { return 327; }
+   int GetInitialWidth()  override { return 460; }
 
    void OnFocus(wxFocusEvent &event);
    void OnCaptureKey(wxCommandEvent &event);
 
    void OnSlider(wxCommandEvent & event);
 
-   void OnAudioCapture(wxCommandEvent & event);
+   void OnAudioCapture(AudioIOEvent);
 
    void ShowOutputGainDialog();
    void ShowInputGainDialog();
@@ -64,6 +66,8 @@ class MixerToolBar final : public ToolBar {
 
    void InitializeMixerToolBar();
    void SetToolTips();
+
+   Observer::Subscription mSubscription;
 
    ASlider *mInputSlider;
    ASlider *mOutputSlider;

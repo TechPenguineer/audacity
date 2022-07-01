@@ -56,6 +56,8 @@ Paul Licameli split from AudacityProject.cpp
 
 #include "HelpText.h"
 
+#include <optional>
+
 static const AudacityProject::AttachedObjects::RegisteredFactory sFileManagerKey{
    []( AudacityProject &parent ){
       auto result = std::make_shared< ProjectFileManager >( parent );
@@ -206,7 +208,7 @@ auto ProjectFileManager::ReadProjectFile(
             err = true;
          }
 
-         err = ( !t->LinkConsistencyCheck() ) || err;
+         err = ( !t->LinkConsistencyFix() ) || err;
 
          mLastSavedTracks->Add(t->Duplicate());
       }
@@ -322,7 +324,7 @@ bool ProjectFileManager::DoSave(const FilePath & fileName, const bool fromSaveAs
    // End of confirmations
 
    // Always save a backup of the original project file
-   Optional<ProjectFileIO::BackupProject> pBackupProject;
+   std::optional<ProjectFileIO::BackupProject> pBackupProject;
    if (fromSaveAs && wxFileExists(fileName))
    {
       pBackupProject.emplace(projectFileIO, fileName);

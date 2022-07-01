@@ -15,18 +15,6 @@ Paul Licameli
 
 class wxWindow;
 
-//! Window placement information for wxWidgetsBasicUI can be constructed from a wxWindow pointer
-struct AUDACITY_DLL_API wxWidgetsWindowPlacement final
-: BasicUI::WindowPlacement {
-   wxWidgetsWindowPlacement() = default;
-   explicit wxWidgetsWindowPlacement( wxWindow *pWindow )
-      : pWindow{ pWindow }
-   {}
-
-   ~wxWidgetsWindowPlacement() override;
-   wxWindow *pWindow{};
-};
-
 //! An implementation of BasicUI::Services in terms of the wxWidgets toolkit
 /*! This is a singleton that doesn't need AUDACITY_DLL_API visibility */
 class wxWidgetsBasicUI final : public BasicUI::Services {
@@ -53,6 +41,11 @@ protected:
    DoMakeGenericProgress(const BasicUI::WindowPlacement &placement,
       const TranslatableString &title,
       const TranslatableString &message) override;
+   int DoMultiDialog(const TranslatableString &message,
+      const TranslatableString &title,
+      const TranslatableStrings &buttons,
+      const ManualPageID &helpPage,
+      const TranslatableString &boxMsg, bool log) override;
 };
 
 #endif

@@ -13,6 +13,8 @@ Paul Licameli split from AudacityProject.cpp
 #include "AudioIOBase.h"
 #include "Project.h"
 
+wxDEFINE_EVENT( EVT_PLAY_SPEED_CHANGE, wxCommandEvent);
+
 static const AudacityProject::AttachedObjects::RegisteredFactory sAudioIOKey{
   []( AudacityProject &parent ){
      return std::make_shared< ProjectAudioIO >( parent );
@@ -68,7 +70,7 @@ void ProjectAudioIO::SetPlaybackMeter(
    auto gAudioIO = AudioIOBase::Get();
    if (gAudioIO)
    {
-      gAudioIO->SetPlaybackMeter( &project , mPlaybackMeter );
+      gAudioIO->SetPlaybackMeter( project.shared_from_this() , mPlaybackMeter );
    }
 }
 
@@ -86,6 +88,15 @@ void ProjectAudioIO::SetCaptureMeter(
    auto gAudioIO = AudioIOBase::Get();
    if (gAudioIO)
    {
-      gAudioIO->SetCaptureMeter( &project, mCaptureMeter );
+      gAudioIO->SetCaptureMeter( project.shared_from_this(), mCaptureMeter );
+   }
+}
+
+void ProjectAudioIO::SetPlaySpeed(double value)
+{
+   if (auto oldValue = GetPlaySpeed(); value != oldValue) {
+      mPlaySpeed.store( value, std::memory_order_relaxed );
+      wxCommandEvent evt{ EVT_PLAY_SPEED_CHANGE };
+      mProject.ProcessEvent(evt);
    }
 }

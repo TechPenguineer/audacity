@@ -46,8 +46,10 @@ KeyConfigPrefs and MousePrefs use.
 
 #include "FileNames.h"
 
+#include "../widgets/BasicMenu.h"
 #include "../widgets/KeyView.h"
 #include "../widgets/AudacityMessageBox.h"
+#include "../widgets/wxWidgetsWindowPlacement.h"
 
 #if wxUSE_ACCESSIBILITY
 #include "../widgets/WindowAccessible.h"
@@ -110,12 +112,12 @@ KeyConfigPrefs::KeyConfigPrefs(
    Bind(wxEVT_SHOW, &KeyConfigPrefs::OnShow, this);
 }
 
-ComponentInterfaceSymbol KeyConfigPrefs::GetSymbol()
+ComponentInterfaceSymbol KeyConfigPrefs::GetSymbol() const
 {
    return KEY_CONFIG_PREFS_PLUGIN_SYMBOL;
 }
 
-TranslatableString KeyConfigPrefs::GetDescription()
+TranslatableString KeyConfigPrefs::GetDescription() const
 {
    return XO("Preferences for KeyConfig");
 }
@@ -175,6 +177,15 @@ void KeyConfigPrefs::Populate()
 /// so this is only used in populating the panel.
 void KeyConfigPrefs::PopulateOrExchange(ShuttleGui & S)
 {
+   ChoiceSetting Setting{ L"/Prefs/KeyConfig/ViewBy",
+      {
+         { wxT("tree"), XXO("&Tree") },
+         { wxT("name"), XXO("&Name") },
+         { wxT("key"), XXO("&Key") },
+      },
+      0 // tree
+   };
+
    S.SetBorder(2);
 
    S.StartStatic(XO("Key Bindings"), 1);
@@ -189,15 +200,7 @@ void KeyConfigPrefs::PopulateOrExchange(ShuttleGui & S)
          {
             S.StartHorizontalLay();
             {
-               S.StartRadioButtonGroup({
-                  wxT("/Prefs/KeyConfig/ViewBy"),
-                  {
-                     { wxT("tree"), XXO("&Tree") },
-                     { wxT("name"), XXO("&Name") },
-                     { wxT("key"), XXO("&Key") },
-                  },
-                  0 // tree
-               });
+               S.StartRadioButtonGroup(Setting);
                {
                   mViewByTree = S.Id(ViewByTreeID)
                      .Name(XO("View by tree"))
@@ -599,8 +602,7 @@ void KeyConfigPrefs::OnDefaults(wxCommandEvent & WXUNUSED(event))
    Menu.Append( 1, _("Standard") );
    Menu.Append( 2, _("Full") );
    Menu.Bind( wxEVT_COMMAND_MENU_SELECTED, &KeyConfigPrefs::OnImportDefaults, this );
-   // Pop it up where the mouse is.
-   PopupMenu(&Menu);//, wxPoint(0, 0));
+   BasicMenu::Handle( &Menu ).Popup( wxWidgetsWindowPlacement{ this } );
 }
 
 void KeyConfigPrefs::FilterKeys( std::vector<NormalizedKeyString> & arr )

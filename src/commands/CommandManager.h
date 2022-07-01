@@ -17,6 +17,7 @@
 #include "ClientData.h"
 #include "CommandFunctors.h"
 #include "CommandFlag.h"
+#include "GlobalVariable.h"
 
 #include "Keyboard.h"
 
@@ -29,6 +30,7 @@
 
 #include <unordered_map>
 
+class wxEvent;
 class wxMenu;
 class wxMenuBar;
 using CommandParameter = CommandID;
@@ -61,12 +63,11 @@ class AUDACITY_DLL_API CommandManager final
    static CommandManager &Get( AudacityProject &project );
    static const CommandManager &Get( const AudacityProject &project );
 
-   // Type of a function that can intercept menu item handling.
-   // If it returns true, bypass the usual dipatch of commands.
-   using MenuHook = std::function< bool(const CommandID&) >;
-
-   // install a menu hook, returning the previously installed one
-   static MenuHook SetMenuHook( const MenuHook &hook );
+   // Interception of menu item handling.
+   // If it returns true, bypass the usual dispatch of commands.
+   struct AUDACITY_DLL_API GlobalMenuHook : GlobalHook<GlobalMenuHook,
+      bool(const CommandID&)
+   >{};
 
    //
    // Constructor / Destructor
@@ -356,9 +357,9 @@ private:
    // Loading/Saving
    //
 
-   bool HandleXMLTag(const wxChar *tag, const wxChar **attrs) override;
-   void HandleXMLEndTag(const wxChar *tag) override;
-   XMLTagHandler *HandleXMLChild(const wxChar *tag) override;
+   bool HandleXMLTag(const std::string_view& tag, const AttributesList &attrs) override;
+   void HandleXMLEndTag(const std::string_view& tag) override;
+   XMLTagHandler *HandleXMLChild(const std::string_view& tag) override;
 
 private:
    // mMaxList only holds shortcuts that should not be added (by default)

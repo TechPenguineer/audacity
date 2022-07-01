@@ -16,7 +16,7 @@ Paul Licameli split from TimeTrackVZoomHandle.cpp
 #include "../../../HitTestResult.h"
 #include "NumberScale.h"
 #include "Prefs.h"
-#include "../../../ProjectHistory.h"
+#include "ProjectHistory.h"
 #include "../../../RefreshCode.h"
 #include "../../../TrackPanelMouseEvent.h"
 #include "../../../TimeTrack.h"
@@ -91,8 +91,9 @@ UIHandle::Result TimeTrackVZoomHandle::Release
          *pProject, pTrack.get(), pParent, RefreshNone
       };
 
-      auto pMenu = PopupMenuTable::BuildMenu(pParent, &TimeTrackMenuTable::Instance(), &data);
-      pParent->PopupMenu(pMenu.get(), event.m_x, event.m_y);
+      auto pMenu = PopupMenuTable::BuildMenu(
+         &TimeTrackMenuTable::Instance(), &data);
+      pMenu->Popup( *pParent, { event.m_x, event.m_y } );
    }
 
    return UpdateVRuler | RefreshAll;

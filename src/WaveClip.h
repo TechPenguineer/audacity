@@ -14,8 +14,10 @@
 
 
 
+#include "ClientData.h"
 #include "SampleFormat.h"
 #include "XMLTagHandler.h"
+#include "SampleCount.h"
 
 #include <wx/longlong.h>
 
@@ -30,90 +32,8 @@ class SampleBlock;
 class SampleBlockFactory;
 using SampleBlockFactoryPtr = std::shared_ptr<SampleBlockFactory>;
 class Sequence;
-class SpectrogramSettings;
-class WaveCache;
-class WaveTrackCache;
 class wxFileNameWrapper;
-
-class AUDACITY_DLL_API SpecCache {
-public:
-
-   // Make invalid cache
-   SpecCache()
-      : algorithm(-1)
-      , pps(-1.0)
-      , start(-1.0)
-      , windowType(-1)
-      , frequencyGain(-1)
-      , dirty(-1)
-   {
-   }
-
-   ~SpecCache()
-   {
-   }
-
-   bool Matches(int dirty_, double pixelsPerSecond,
-      const SpectrogramSettings &settings, double rate) const;
-
-   // Calculate one column of the spectrum
-   bool CalculateOneSpectrum
-      (const SpectrogramSettings &settings,
-       WaveTrackCache &waveTrackCache,
-       const int xx, sampleCount numSamples,
-       double offset, double rate, double pixelsPerSecond,
-       int lowerBoundX, int upperBoundX,
-       const std::vector<float> &gainFactors,
-       float* __restrict scratch,
-       float* __restrict out) const;
-
-   // Grow the cache while preserving the (possibly now invalid!) contents
-   void Grow(size_t len_, const SpectrogramSettings& settings,
-               double pixelsPerSecond, double start_);
-
-   // Calculate the dirty columns at the begin and end of the cache
-   void Populate
-      (const SpectrogramSettings &settings, WaveTrackCache &waveTrackCache,
-       int copyBegin, int copyEnd, size_t numPixels,
-       sampleCount numSamples,
-       double offset, double rate, double pixelsPerSecond);
-
-   size_t       len { 0 }; // counts pixels, not samples
-   int          algorithm;
-   double       pps;
-   double       start;
-   int          windowType;
-   size_t       windowSize { 0 };
-   unsigned     zeroPaddingFactor { 0 };
-   int          frequencyGain;
-   std::vector<float> freq;
-   std::vector<sampleCount> where;
-
-   int          dirty;
-};
-
-class SpecPxCache {
-public:
-   SpecPxCache(size_t cacheLen)
-      : len{ cacheLen }
-      , values{ len }
-   {
-      valid = false;
-      scaleType = 0;
-      range = gain = -1;
-      minFreq = maxFreq = -1;
-   }
-
-   size_t  len;
-   Floats values;
-   bool         valid;
-
-   int scaleType;
-   int range;
-   int gain;
-   int minFreq;
-   int maxFreq;
-};
+namespace BasicUI { class ProgressDialog; }
 
 class WaveClip;
 
@@ -169,7 +89,15 @@ public:
    }
 };
 
+struct AUDACITY_DLL_API WaveClipListener
+{
+   virtual ~WaveClipListener() = 0;
+   virtual void MarkChanged() = 0;
+   virtual void Invalidate() = 0;
+};
+
 class AUDACITY_DLL_API WaveClip final : public XMLTagHandler
+   , public ClientData::Site< WaveClip, WaveClipListener >
 {
 private:
    // It is an error to copy a WaveClip without specifying the
@@ -179,6 +107,8 @@ private:
    WaveClip& operator= (const WaveClip&) PROHIBITED;
 
 public:
+   using Caches = Site< WaveClip, WaveClipListener >;
+
    // typical constructor
    WaveClip(const SampleBlockFactoryPtr &factory, sampleFormat format,
       int rate, int colourIndex);
@@ -203,7 +133,8 @@ public:
 
    // Always gives non-negative answer, not more than sample sequence length
    // even if t0 really falls outside that range
-   void TimeToSamplesClip(double t0, sampleCount *s0) const;
+   sampleCount TimeToSequenceSamples(double t) const;
+   sampleCount ToSequenceSamples(sampleCount s) const;
 
    int GetRate() const { return mRate; }
 
@@ -212,28 +143,59 @@ public:
 
    // Resample clip. This also will set the rate, but without changing
    // the length of the clip
-   void Resample(int rate, ProgressDialog *progress = NULL);
+   void Resample(int rate, BasicUI::ProgressDialog *progress = NULL);
 
    void SetColourIndex( int index ){ mColourIndex = index;};
    int GetColourIndex( ) const { return mColourIndex;};
-   void SetOffset(double offset);
-   double GetOffset() const { return mOffset; }
+   
+   double GetSequenceStartTime() const noexcept;
+   void SetSequenceStartTime(double startTime);
+   double GetSequenceEndTime() const;
+   //! Returns the index of the first sample of the underlying sequence
+   sampleCount GetSequenceStartSample() const;
+   //! Returns the index of the sample next after the last sample of the underlying sequence
+   sampleCount GetSequenceEndSample() const;
+   //! Returns the total number of samples in underlying sequence (not counting the cutlines)
+   sampleCount GetSequenceSamplesCount() const;
+
+   double GetPlayStartTime() const noexcept;
+   void SetPlayStartTime(double time);
+
+   double GetPlayEndTime() const;
+
+   sampleCount GetPlayStartSample() const;
+   sampleCount GetPlayEndSample() const;
+   sampleCount GetPlaySamplesCount() const;
+
+   //! Sets the play start offset in seconds from the beginning of the underlying sequence
+   void SetTrimLeft(double trim);
+   //! Returns the play start offset in seconds from the beginning of the underlying sequence
+   double GetTrimLeft() const noexcept;
+
+   //! Sets the play end offset in seconds from the ending of the underlying sequence
+   void SetTrimRight(double trim);
+   //! Returns the play end offset in seconds from the ending of the underlying sequence
+   double GetTrimRight() const noexcept;
+
+   //! Moves play start position by deltaTime
+   void TrimLeft(double deltaTime);
+   //! Moves play end position by deltaTime
+   void TrimRight(double deltaTime);
+
+   //! Sets the the left trimming to the absolute time (if that is in bounds)
+   void TrimLeftTo(double to);
+   //! Sets the the right trimming to the absolute time (if that is in bounds)
+   void TrimRightTo(double to);
+
    /*! @excsafety{No-fail} */
-   void Offset(double delta)
-      { SetOffset(GetOffset() + delta); }
-   double GetStartTime() const;
-   double GetEndTime() const;
-   sampleCount GetStartSample() const;
-   sampleCount GetEndSample() const;
-   sampleCount GetNumSamples() const;
+   void Offset(double delta) noexcept;
 
    // One and only one of the following is true for a given t (unless the clip
-   // has zero length -- then BeforeClip() and AfterClip() can both be true).
-   // Within() is true if the time is substantially within the clip
-   bool WithinClip(double t) const;
-   bool BeforeClip(double t) const;
-   bool AfterClip(double t) const;
-   bool IsClipStartAfterClip(double t) const;
+   // has zero length -- then BeforePlayStartTime() and AfterPlayEndTime() can both be true).
+   // WithinPlayRegion() is true if the time is substantially within the clip
+   bool WithinPlayRegion(double t) const;
+   bool BeforePlayStartTime(double t) const;
+   bool AfterPlayEndTime(double t) const;
 
    bool GetSamples(samplePtr buffer, sampleFormat format,
                    sampleCount start, size_t len, bool mayThrow = true) const;
@@ -255,18 +217,10 @@ public:
     * called automatically when WaveClip has a chance to know that something
     * has changed, like when member functions SetSamples() etc. are called. */
    /*! @excsafety{No-fail} */
-   void MarkChanged()
-      { mDirty++; }
+   void MarkChanged();
 
    /** Getting high-level data for screen display and clipping
     * calculations and Contrast */
-   bool GetWaveDisplay(WaveDisplay &display,
-                       double t0, double pixelsPerSecond) const;
-   bool GetSpectrogram(WaveTrackCache &cache,
-                       const float *& spectrogram,
-                       const sampleCount *& where,
-                       size_t numPixels,
-                       double t0, double pixelsPerSecond) const;
    std::pair<float, float> GetMinMax(
       double t0, double t1, bool mayThrow = true) const;
    float GetRMS(double t0, double t1, bool mayThrow = true) const;
@@ -293,6 +247,16 @@ public:
    /// This name is consistent with WaveTrack::Clear. It performs a "Cut"
    /// operation (but without putting the cut audio to the clipboard)
    void Clear(double t0, double t1);
+
+   /// Removes samples starting from the left boundary of the clip till
+   /// t, if it's inside the play region. Also removes trimmed (hidden)
+   /// data, if present. Changes offset to make remaining samples stay
+   /// at their old place. Destructive operation.
+   void ClearLeft(double t);
+   /// Removes samples starting from t (if it's inside the clip),
+   /// till the right boundary. Also removes trimmed (hidden)
+   /// data, if present. Destructive operation.
+   void ClearRight(double t);
 
    /// Clear, and add cut line that starts at t0 and contains everything until t1.
    void ClearAndAddCutLine(double t0, double t1);
@@ -335,16 +299,13 @@ public:
    void CloseLock(); //should be called when the project closes.
    // not balanced by unlocking calls.
 
-   ///Delete the wave cache - force redraw.  Thread-safe
-   void ClearWaveCache();
-
    //
    // XMLTagHandler callback methods for loading and saving
    //
 
-   bool HandleXMLTag(const wxChar *tag, const wxChar **attrs) override;
-   void HandleXMLEndTag(const wxChar *tag) override;
-   XMLTagHandler *HandleXMLChild(const wxChar *tag) override;
+   bool HandleXMLTag(const std::string_view& tag, const AttributesList &attrs) override;
+   void HandleXMLEndTag(const std::string_view& tag) override;
+   XMLTagHandler *HandleXMLChild(const std::string_view& tag) override;
    void WriteXML(XMLWriter &xmlFile) const /* not override */;
 
    // AWD, Oct 2009: for pasting whitespace at the end of selection
@@ -357,21 +318,32 @@ public:
    void SetName(const wxString& name);
    const wxString& GetName() const;
 
-public:
-   // Cache of values to colour pixels of Spectrogram - used by TrackArtist
-   mutable std::unique_ptr<SpecPxCache> mSpecPxCache;
+   sampleCount TimeToSamples(double time) const noexcept;
+   double SamplesToTime(sampleCount s) const noexcept;
+
+   //! Silences the 'length' amount of samples starting from 'offset'(relative to the play start)
+   void SetSilence(sampleCount offset, sampleCount length);
+
+   const SampleBuffer &GetAppendBuffer() const { return mAppendBuffer; }
+   size_t GetAppendBufferLen() const { return mAppendBufferLen; }
 
 protected:
-   double mOffset { 0 };
+   /// This name is consistent with WaveTrack::Clear. It performs a "Cut"
+   /// operation (but without putting the cut audio to the clipboard)
+   void ClearSequence(double t0, double t1);
+
+   
+
+   double mSequenceOffset { 0 };
+   double mTrimLeft{ 0 };
+   double mTrimRight{ 0 };
+
    int mRate;
-   int mDirty { 0 };
    int mColourIndex;
 
    std::unique_ptr<Sequence> mSequence;
    std::unique_ptr<Envelope> mEnvelope;
 
-   mutable std::unique_ptr<WaveCache> mWaveCache;
-   mutable std::unique_ptr<SpecCache> mSpecCache;
    SampleBuffer  mAppendBuffer {};
    size_t        mAppendBufferLen { 0 };
 

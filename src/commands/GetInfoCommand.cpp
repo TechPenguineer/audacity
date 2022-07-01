@@ -36,7 +36,9 @@ This class now lists
 #include "ViewInfo.h"
 #include "../WaveTrack.h"
 #include "../LabelTrack.h"
-#include "../Envelope.h"
+#include "../NoteTrack.h"
+#include "../TimeTrack.h"
+#include "Envelope.h"
 
 #include "SelectCommand.h"
 #include "../ShuttleGui.h"
@@ -44,7 +46,7 @@ This class now lists
 
 #include "../prefs/PrefsDialog.h"
 #include "../Shuttle.h"
-#include "../PluginManager.h"
+#include "PluginManager.h"
 #include "../tracks/ui/TrackView.h"
 #include "../ShuttleGui.h"
 
@@ -100,13 +102,18 @@ static const EnumValueSymbol kFormats[nFormats] =
    { XO("Brief") }
 };
 
-
-
-bool GetInfoCommand::DefineParams( ShuttleParams & S ){
+template<bool Const>
+bool GetInfoCommand::VisitSettings( SettingsVisitorBase<Const> & S ){
    S.DefineEnum( mInfoType, wxT("Type"), 0, kTypes, nTypes );
    S.DefineEnum( mFormat, wxT("Format"), 0, kFormats, nFormats );
    return true;
 }
+
+bool GetInfoCommand::VisitSettings( SettingsVisitor & S )
+   { return VisitSettings<false>(S); }
+
+bool GetInfoCommand::VisitSettings( ConstSettingsVisitor & S )
+   { return VisitSettings<true>(S); }
 
 void GetInfoCommand::PopulateOrExchange(ShuttleGui & S)
 {
@@ -213,15 +220,13 @@ public:
       const TranslatableString &Prompt,
       const BoolSetting &Setting) override;
 
-   wxChoice *TieChoice(
-      const TranslatableString &Prompt,
-      const ChoiceSetting &choiceSetting ) override;
+   wxChoice *TieChoice(const TranslatableString &Prompt,
+      ChoiceSetting &choiceSetting) override;
 
-   wxChoice * TieNumberAsChoice(
-      const TranslatableString &Prompt,
-      const IntSetting &Setting,
+   wxChoice * TieNumberAsChoice(const TranslatableString &Prompt,
+      IntSetting &Setting,
       const TranslatableStrings & Choices,
-      const std::vector<int> * pInternalChoices, int iNoMatchSelector ) override;
+      const std::vector<int> * pInternalChoices, int iNoMatchSelector) override;
 
    wxTextCtrl * TieTextBox(
       const TranslatableString &Prompt,
@@ -284,9 +289,8 @@ wxCheckBox * ShuttleGuiGetDefinition::TieCheckBoxOnRight(
    return ShuttleGui::TieCheckBoxOnRight( Prompt, Setting );
 }
 
-wxChoice * ShuttleGuiGetDefinition::TieChoice(
-   const TranslatableString &Prompt,
-   const ChoiceSetting &choiceSetting  )
+wxChoice * ShuttleGuiGetDefinition::TieChoice(const TranslatableString &Prompt,
+   ChoiceSetting &choiceSetting)
 {
    StartStruct();
    AddItem( choiceSetting.Key(), "id" );
@@ -305,7 +309,7 @@ wxChoice * ShuttleGuiGetDefinition::TieChoice(
 
 wxChoice * ShuttleGuiGetDefinition::TieNumberAsChoice(
    const TranslatableString &Prompt,
-   const IntSetting &Setting,
+   IntSetting &Setting,
    const TranslatableStrings & Choices,
    const std::vector<int> * pInternalChoices, int iNoMatchSelector)
 {
@@ -518,8 +522,8 @@ bool GetInfoCommand::SendClips(const CommandContext &context)
          for (WaveClip * pClip : ptrs) {
             context.StartStruct();
             context.AddItem((double)i, "track");
-            context.AddItem(pClip->GetStartTime(), "start");
-            context.AddItem(pClip->GetEndTime(), "end");
+            context.AddItem(pClip->GetPlayStartTime(), "start");
+            context.AddItem(pClip->GetPlayEndTime(), "end");
             context.AddItem(pClip->GetColourIndex(), "color");
             context.EndStruct();
          }
@@ -546,7 +550,7 @@ bool GetInfoCommand::SendEnvelopes(const CommandContext &context)
             context.StartStruct();
             context.AddItem((double)i, "track");
             context.AddItem((double)j, "clip");
-            context.AddItem(pClip->GetStartTime(), "start");
+            context.AddItem(pClip->GetPlayStartTime(), "start");
             Envelope * pEnv = pClip->GetEnvelope();
             context.StartField("points");
             context.StartArray();
@@ -560,7 +564,7 @@ bool GetInfoCommand::SendEnvelopes(const CommandContext &context)
             }
             context.EndArray();
             context.EndField();
-            context.AddItem(pClip->GetEndTime(), "end");
+            context.AddItem(pClip->GetPlayEndTime(), "end");
             context.EndStruct();
             j++;
          }

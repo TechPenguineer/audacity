@@ -7,25 +7,27 @@
 #include "../NoteTrack.h"
 #include "Prefs.h"
 #include "Project.h"
-#include "../ProjectHistory.h"
+#include "ProjectHistory.h"
 #include "ProjectRate.h"
 #include "../ProjectSettings.h"
 #include "../ProjectWindow.h"
 #include "../ProjectWindows.h"
 #include "../SelectUtilities.h"
+#include "../SyncLock.h"
 #include "../TrackPanel.h"
 #include "../TrackPanelAx.h"
-#include "../UndoManager.h"
+#include "UndoManager.h"
 #include "ViewInfo.h"
 #include "../WaveTrack.h"
 #include "../commands/CommandContext.h"
 #include "../commands/CommandManager.h"
-#include "../commands/ScreenshotCommand.h"
-#include "../effects/TimeWarper.h"
+#include "TimeWarper.h"
 #include "../export/Export.h"
 #include "../prefs/PrefsDialog.h"
 #include "../tracks/labeltrack/ui/LabelTrackView.h"
+#include "../tracks/playabletrack/wavetrack/ui/WaveTrackView.h"
 #include "../widgets/AudacityMessageBox.h"
+#include "../widgets/VetoDialogHook.h"
 
 // private helper classes and functions
 namespace {
@@ -162,8 +164,8 @@ void OnUndo(const CommandContext &context)
    auto t = *tracks.Selected().begin();
    if (!t)
       t = *tracks.Any().begin();
+   TrackFocus::Get(project).Set(t);
    if (t) {
-      TrackFocus::Get(project).Set(t);
       t->EnsureVisible();
    }
 }
@@ -192,8 +194,8 @@ void OnRedo(const CommandContext &context)
    auto t = *tracks.Selected().begin();
    if (!t)
       t = *tracks.Any().begin();
+   TrackFocus::Get(project).Set(t);
    if (t) {
-      TrackFocus::Get(project).Set(t);
       t->EnsureVisible();
    }
 }
@@ -214,6 +216,16 @@ void OnCut(const CommandContext &context)
    for (auto lt : tracks.Selected< LabelTrack >()) {
       auto &view = LabelTrackView::Get( *lt );
       if (view.CutSelectedText( context.project )) {
+         trackPanel.Refresh(false);
+         return;
+      }
+   }
+
+   //Presumably, there might be not more than one track
+   //that expects text input
+   for (auto wt : tracks.Any<WaveTrack>()) {
+      auto& view = WaveTrackView::Get(*wt);
+      if (view.CutSelectedText(context.project)) {
          trackPanel.Refresh(false);
          return;
       }
@@ -254,7 +266,7 @@ void OnCut(const CommandContext &context)
    // Proceed to change the project.  If this throws, the project will be
    // rolled back by the top level handler.
 
-   (tracks.Any() + &Track::IsSelectedOrSyncLockSelected).Visit(
+   (tracks.Any() + &SyncLock::IsSelectedOrSyncLockSelected).Visit(
 #if defined(USE_MIDI)
       [](NoteTrack*) {
          //if NoteTrack, it was cut, so do not clear anything
@@ -297,7 +309,7 @@ void OnDelete(const CommandContext &context)
    for (auto n : tracks.Any()) {
       if (!n->SupportsBasicEditing())
          continue;
-      if (n->GetSelected() || n->IsSyncLockSelected()) {
+      if (SyncLock::IsSelectedOrSyncLockSelected(n)) {
          n->Clear(selectedRegion.t0(), selectedRegion.t1());
       }
    }
@@ -324,6 +336,14 @@ void OnCopy(const CommandContext &context)
       auto &view = LabelTrackView::Get( *lt );
       if (view.CopySelectedText( context.project )) {
          //trackPanel.Refresh(false);
+         return;
+      }
+   }
+   //Presumably, there might be not more than one track
+   //that expects text input
+   for (auto wt : tracks.Any<WaveTrack>()) {
+      auto& view = WaveTrackView::Get(*wt);
+      if (view.CopySelectedText(context.project)) {
          return;
       }
    }
@@ -376,6 +396,7 @@ void OnPaste(const CommandContext &context)
 {
    auto &project = context.project;
    auto &tracks = TrackList::Get( project );
+   auto& trackPanel = TrackPanel::Get(project);
    auto &trackFactory = WaveTrackFactory::Get( project );
    auto &pSampleBlockFactory = trackFactory.GetSampleBlockFactory();
    const auto &settings = ProjectSettings::Get( project );
@@ -386,6 +407,16 @@ void OnPaste(const CommandContext &context)
    // Handle text paste (into active label) first.
    if (DoPasteText(project))
       return;
+
+   //Presumably, there might be not more than one track
+   //that expects text input
+   for (auto wt : tracks.Any<WaveTrack>()) {
+      auto& view = WaveTrackView::Get(*wt);
+      if (view.PasteText(context.project)) {
+         trackPanel.Refresh(false);
+         return;
+      }
+   }
 
    // If nothing's selected, we just insert NEW tracks.
    if (DoPasteNothingSelected(project))
@@ -449,7 +480,7 @@ void OnPaste(const CommandContext &context)
             while (n && (!c->SameKindAs(*n) || !n->GetSelected()))
             {
                // Must perform sync-lock adjustment before incrementing n
-               if (n->IsSyncLockSelected()) {
+               if (SyncLock::IsSyncLockSelected(n)) {
                   auto newT1 = t0 + clipboard.Duration();
                   if (t1 != newT1 && t1 <= n->GetEndTime()) {
                      n->SyncLockAdjust(t1, newT1);
@@ -561,7 +592,7 @@ void OnPaste(const CommandContext &context)
             c = * ++ pC;
          }
       } // if (n->GetSelected())
-      else if (n->IsSyncLockSelected())
+      else if (SyncLock::IsSyncLockSelected(n))
       {
          auto newT1 = t0 + clipboard.Duration();
          if (t1 != newT1 && t1 <= n->GetEndTime()) {
@@ -600,7 +631,7 @@ void OnPaste(const CommandContext &context)
             }
          },
          [&](LabelTrack *lt, const Track::Fallthrough &fallthrough) {
-            if (!lt->GetSelected() && !lt->IsSyncLockSelected())
+            if (!SyncLock::IsSelectedOrSyncLockSelected(lt))
                return fallthrough();
 
             lt->Clear(t0, t1);
@@ -611,7 +642,7 @@ void OnPaste(const CommandContext &context)
                   clipboard.Duration(), t0);
          },
          [&](Track *n) {
-            if (n->IsSyncLockSelected())
+            if (SyncLock::IsSyncLockSelected(n))
                n->SyncLockAdjust(t1, t0 + clipboard.Duration() );
          }
       );
@@ -630,7 +661,7 @@ void OnPaste(const CommandContext &context)
       if (ff) {
          TrackFocus::Get(project).Set(ff);
          ff->EnsureVisible();
-         ff->LinkConsistencyCheck();
+         ff->LinkConsistencyFix();
       }
    }
 }
@@ -761,7 +792,7 @@ void OnTrim(const CommandContext &context)
 
    tracks.Selected().Visit(
       [&](WaveTrack *wt) {
-         //Delete the section before the left selector
+         //Hide the section before the left selector
          wt->Trim(selectedRegion.t0(),
             selectedRegion.t1());
       }
@@ -940,7 +971,7 @@ void OnPreferences(const CommandContext &context)
 
    GlobalPrefsDialog dialog(&GetProjectFrame( project ) /* parent */, &project );
 
-   if( ScreenshotCommand::MayCapture( &dialog ) )
+   if( VetoDialogHook::Call( &dialog ) )
       return;
 
    if (!dialog.ShowModal()) {
@@ -1125,7 +1156,7 @@ BaseItemSharedPtr EditMenu()
       Section( "Other",
       //////////////////////////////////////////////////////////////////////////
 
-         Menu( wxT("Clip"), XXO("Clip B&oundaries"),
+         Menu( wxT("Clip"), XXO("Audi&o Clips"),
             Section( "",
                /* i18n-hint: (verb) It's an item on a menu. */
                Command( wxT("Split"), XXO("Sp&lit"), FN(OnSplit),

@@ -5,7 +5,7 @@
    ExportFFmpeg.cpp
 
    Audacity(R) is copyright (c) 1999-2009 Audacity Team.
-   License: GPL v2.  See License.txt.
+   License: GPL v2 or later.  See License.txt.
 
    LRN
 
@@ -35,11 +35,11 @@ function.
 #include <wx/spinctrl.h>
 #include <wx/combobox.h>
 
-#include "../Mix.h"
+#include "Mix.h"
 #include "ProjectRate.h"
 #include "ProjectSettings.h"
 #include "../Tags.h"
-#include "../Track.h"
+#include "Track.h"
 #include "../widgets/AudacityMessageBox.h"
 #include "../widgets/ProgressDialog.h"
 #include "wxFileNameWrapper.h"
@@ -199,7 +199,7 @@ ExportFFmpeg::ExportFFmpeg()
    for (newfmt = 0; newfmt < FMT_LAST; newfmt++)
    {
       wxString shortname(ExportFFmpegOptions::fmts[newfmt].shortname);
-      //Don't hide export types when there's no av-libs, and don't hide FMT_OTHER
+      // Don't hide export types when there's no av-libs, and don't hide FMT_OTHER
       if (newfmt < FMT_OTHER && mFFmpeg)
       {
          // Format/Codec support is compiled in?
@@ -864,7 +864,7 @@ static int encode_audio(const FFmpegFunctions& ffmpeg, AVCodecContextWrapper*avc
       return ret;
    }
 
-   pkt->ResetTimestamps(); // we dont set frame timestamps thus dont trust the AVPacket timestamps
+   pkt->ResetTimestamps(); // We don't set frame timestamps thus don't trust the AVPacket timestamps
 
    return got_output;
 }
